@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ম্যাজিক ওয়াল · কন্ট্রোল রুম</title>
+  <link rel="stylesheet" href="css/fonts.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div class="brand-text">
+        <strong>ম্যাজিক ওয়াল</strong>
+        <span>কন্ট্রোল রুম</span>
+      </div>
+    </div>
+
+    <div class="header-status">
+      <span class="on-air-pill"><span class="dot" aria-hidden="true"></span>সম্প্রচারে · <strong id="on-air">…</strong></span>
+      <span id="hub-status" class="conn-pill" data-status="connecting">সংযোগ হচ্ছে…</span>
+    </div>
+
+    <label class="key-field">
+      <span class="key-label">অ্যাডমিন কী</span>
+      <input id="admin-key" type="password" autocomplete="off" placeholder=".env ফাইল থেকে কী দিন">
+      <small id="key-status"></small>
+    </label>
+  </header>
+
+  <div class="layout">
+    <!-- বাম: কী সম্প্রচারে আছে -->
+    <aside class="sidebar">
+      <section class="panel">
+        <h2 class="panel-heading">সম্প্রচারে পাঠান</h2>
+        <div class="module-switch" role="group" aria-label="সক্রিয় মডিউল">
+          <button type="button" data-module="Election">
+            <span class="module-name">নির্বাচন<small>Election</small></span><span class="live-tag">লাইভ</span>
+          </button>
+          <button type="button" data-module="Sports">
+            <span class="module-name">খেলা<small>Sports</small></span><span class="live-tag">লাইভ</span>
+          </button>
+          <button type="button" data-module="War">
+            <span class="module-name">যুদ্ধ ও ভূরাজনীতি<small>War &amp; Geopolitics</small></span><span class="live-tag">লাইভ</span>
+          </button>
+          <button type="button" data-module="Budget">
+            <span class="module-name">বাজেট<small>Budget</small></span><span class="live-tag">লাইভ</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2 class="panel-heading">ওয়াল প্রিভিউ</h2>
+          <a class="link" href="magic-wall.html" target="_blank" rel="noopener">পূর্ণ পর্দায় খুলুন ↗</a>
+        </div>
+        <div id="preview" class="preview">
+          <iframe src="magic-wall.html" title="প্রেজেন্টার ওয়ালের লাইভ প্রিভিউ" tabindex="-1" loading="lazy"></iframe>
+        </div>
+        <p class="hint">প্রেজেন্টার যা দেখছেন, হুবহু তাই — লাইভ আপডেট হয়।</p>
+      </section>
+    </aside>
+
+    <!-- ডান: সম্পাদনা -->
+    <main class="content">
+      <nav class="tabs" role="tablist" aria-label="সম্পাদক">
+        <button type="button" role="tab" data-tab="Election">নির্বাচন</button>
+        <button type="button" role="tab" data-tab="Sports">খেলা</button>
+        <button type="button" role="tab" data-tab="War">সংঘাত</button>
+        <button type="button" role="tab" data-tab="Budget">বাজেট</button>
+      </nav>
+
+      <!-- ===== নির্বাচন ===== -->
+      <div class="panel-stack" role="tabpanel" data-panel="Election" hidden>
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>লাইভ ফলাফল</h2>
+              <p>ভোটের সংখ্যা বদলান — ওয়াল এক সেকেন্ডের মধ্যে আপডেট হবে।</p>
+            </div>
+            <button type="button" id="el-show" class="secondary">ওয়ালে দেখান</button>
+          </div>
+          <label class="field-wide">আসন
+            <select id="el-constituency"></select>
+          </label>
+          <p id="el-summary" class="summary"></p>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>প্রার্থী</th><th>দল</th><th class="num">ভোট</th><th></th></tr></thead>
+              <tbody id="el-results"></tbody>
+            </table>
+          </div>
+          <form id="el-add" class="inline-form">
+            <label>এই আসনে প্রার্থী যোগ করুন
+              <select id="el-add-candidate"></select>
+            </label>
+            <label class="narrow">ভোট
+              <input id="el-add-votes" type="number" min="0" step="1" value="0" required>
+            </label>
+            <button type="submit">যোগ করুন</button>
+          </form>
+        </section>
+
+        <div class="card-grid">
+          <section class="card">
+            <div class="card-head"><div><h2>নতুন আসন</h2><p>মানচিত্রে নিজের জেলায় দেখা যাবে।</p></div></div>
+            <form id="el-new-seat" class="form-grid">
+              <label>সম্প্রচারে নাম
+                <input id="el-new-seat-name" type="text" required maxlength="150" placeholder="ঢাকা-১০">
+              </label>
+              <label>মানচিত্র আইডি
+                <input id="el-new-seat-path" type="text" required maxlength="100" placeholder="dhaka-10">
+              </label>
+              <label>জেলা
+                <select id="el-new-seat-district" required></select>
+              </label>
+              <label>মোট ভোটার
+                <input id="el-new-seat-voters" type="number" min="0" step="1" value="0" required>
+              </label>
+              <button type="submit" class="span-all">আসন যোগ করুন</button>
+            </form>
+          </section>
+
+          <section class="card">
+            <div class="card-head"><div><h2>নতুন প্রার্থী</h2><p>তারপর ওপরে একটি আসনে যোগ করুন।</p></div></div>
+            <form id="el-new-candidate" class="form-grid">
+              <label class="span-all">নাম
+                <input id="el-new-candidate-name" type="text" required maxlength="150">
+              </label>
+              <label>দল
+                <input id="el-new-candidate-party" type="text" required maxlength="150" list="el-parties" autocomplete="off">
+                <datalist id="el-parties"></datalist>
+              </label>
+              <label>প্রতীক
+                <input id="el-new-candidate-symbol" type="text" maxlength="200" placeholder="নৌকা">
+              </label>
+              <button type="submit" class="span-all">প্রার্থী যোগ করুন</button>
+            </form>
+          </section>
+        </div>
+      </div>
+
+      <!-- ===== খেলা ===== -->
+      <div class="panel-stack" role="tabpanel" data-panel="Sports" hidden>
+        <section class="card">
+          <div class="card-head">
+            <div><h2>ম্যাচ ও খেলোয়াড়</h2><p>ওয়াল কার ঘটনা বিশ্লেষণ করবে তা বেছে নিন।</p></div>
+            <button type="button" id="sp-show" class="secondary">ওয়ালে দেখান</button>
+          </div>
+          <div class="form-grid">
+            <label>ম্যাচ
+              <select id="sp-match"></select>
+            </label>
+            <label>খেলোয়াড়
+              <select id="sp-player"></select>
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><div><h2>ঘটনা যোগ করুন</h2><p>অবস্থান দিতে মাঠে স্পর্শ করুন। পাস বা শটের তীর আঁকতে টেনে ধরুন।</p></div></div>
+          <div class="sports-editor">
+            <canvas id="sp-pitch" class="mini-pitch" aria-label="অবস্থান দিতে স্পর্শ করুন; তীর আঁকতে টেনে ধরুন"></canvas>
+            <form id="sp-form" class="stack">
+              <label>ঘটনার ধরন
+                <select id="sp-type"></select>
+              </label>
+              <label>মিনিট
+                <input id="sp-minute" type="number" min="0" max="200" step="1" value="0" required>
+              </label>
+              <p id="sp-coords" class="coords">অবস্থান ঠিক করা হয়নি</p>
+              <div class="button-row">
+                <button type="submit">ঘটনা যোগ করুন</button>
+                <button type="button" id="sp-clear" class="secondary">মুছে দিন</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><div><h2>নথিভুক্ত ঘটনা</h2><p>সর্বশেষটি আগে।</p></div></div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>মিনিট</th><th>ধরন</th><th>শুরু</th><th>শেষ</th><th></th></tr></thead>
+              <tbody id="sp-events"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ===== সংঘাত ===== -->
+      <div class="panel-stack" role="tabpanel" data-panel="War" hidden>
+        <section class="card">
+          <div class="card-head"><div><h2>ওয়ালে কী দেখাবে</h2><p>তারিখ ফাঁকা রাখলে সর্বশেষ ঘটনা থেকে শুরু হবে; অঞ্চল ফাঁকা রাখলে সব অঞ্চলের সারসংক্ষেপ।</p></div></div>
+          <form id="war-focus" class="inline-form">
+            <label>অঞ্চল
+              <select id="war-zone"></select>
+            </label>
+            <label class="narrow">স্লাইডারের তারিখ
+              <input id="war-date" type="date">
+            </label>
+            <button type="submit" class="secondary">ওয়ালে দেখান</button>
+          </form>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><div><h2>এই অঞ্চলের টাইমলাইন</h2><p>প্রতিটি ঘটনা ওই তারিখ থেকে অঞ্চলের নিয়ন্ত্রণ নির্ধারণ করে।</p></div></div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>তারিখ</th><th>নিয়ন্ত্রণে</th><th class="num">হতাহত</th><th>বিবরণ</th><th></th></tr></thead>
+              <tbody id="war-events"></tbody>
+            </table>
+          </div>
+          <form id="war-event-form" class="form-grid three">
+            <label>তারিখ
+              <input id="war-event-date" type="date" required>
+            </label>
+            <label>নিয়ন্ত্রণকারী পক্ষ
+              <input id="war-event-force" type="text" list="war-forces" required maxlength="150" autocomplete="off" placeholder="বিরোধপূর্ণ = ডোরাকাটা">
+              <datalist id="war-forces"></datalist>
+            </label>
+            <label>হতাহতের সংখ্যা
+              <input id="war-event-casualties" type="number" min="0" step="1" value="0" required>
+            </label>
+            <label class="span-all">বিবরণ
+              <textarea id="war-event-description" rows="2" maxlength="2000"></textarea>
+            </label>
+            <button type="submit" class="span-all">অঞ্চলে ঘটনা যোগ করুন</button>
+          </form>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><div><h2>নতুন সংঘাতপূর্ণ অঞ্চল</h2><p>মানচিত্র কোড হলো বিশ্ব মানচিত্রে দেশের কোড, যেমন SDN, UKR, MMR (দক্ষিণ সুদান = SDS)।</p></div></div>
+          <form id="war-zone-form" class="inline-form">
+            <label>সম্প্রচারে নাম
+              <input id="war-zone-name" type="text" required maxlength="150" placeholder="সুদান">
+            </label>
+            <label class="narrow">মানচিত্র কোড
+              <input id="war-zone-path" type="text" required maxlength="100" placeholder="SDN">
+            </label>
+            <button type="submit">অঞ্চল যোগ করুন</button>
+          </form>
+        </section>
+      </div>
+
+      <!-- ===== বাজেট ===== -->
+      <div class="panel-stack" role="tabpanel" data-panel="Budget" hidden>
+        <section class="card">
+          <div class="card-head">
+            <div><h2>অর্থবছর</h2><p>ওয়ালে একবারে একটি অর্থবছর দেখানো হয়।</p></div>
+            <button type="button" id="budget-show" class="secondary">ওয়ালে দেখান</button>
+          </div>
+          <label class="field-wide">অর্থবছর
+            <select id="budget-year"></select>
+          </label>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><div><h2>খাতসমূহ</h2><p>বরাদ্দ কোটি টাকায়।</p></div></div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>খাত</th><th class="num">বরাদ্দ</th><th class="num">প্রকল্প</th><th></th></tr></thead>
+              <tbody id="budget-sectors"></tbody>
+            </table>
+          </div>
+          <form id="budget-sector-form" class="form-grid three">
+            <label>নতুন খাত
+              <input id="budget-sector-name" type="text" required maxlength="150" placeholder="শিক্ষা">
+            </label>
+            <label>অর্থবছর
+              <input id="budget-sector-year" type="text" required maxlength="20" placeholder="2025-26">
+            </label>
+            <label>বরাদ্দ
+              <input id="budget-sector-allocation" type="number" min="0" step="any" value="0" required>
+            </label>
+            <button type="submit" class="span-all">খাত যোগ করুন</button>
+          </form>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><div><h2>মেগা প্রকল্প</h2><p>কাজ এগোলে এখানে অগ্রগতি হালনাগাদ করুন।</p></div></div>
+          <label class="field-wide">খাত
+            <select id="budget-project-sector"></select>
+          </label>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>প্রকল্প</th><th class="num">ব্যয়</th><th class="num">অগ্রগতি %</th><th>অবস্থান</th><th></th></tr></thead>
+              <tbody id="budget-projects"></tbody>
+            </table>
+          </div>
+          <form id="budget-project-form" class="form-grid four">
+            <label>নতুন প্রকল্প
+              <input id="budget-project-name" type="text" required maxlength="200">
+            </label>
+            <label>ব্যয়
+              <input id="budget-project-amount" type="number" min="0" step="any" value="0" required>
+            </label>
+            <label>অগ্রগতি %
+              <input id="budget-project-completion" type="number" min="0" max="100" step="any" value="0" required>
+            </label>
+            <label>অবস্থান
+              <input id="budget-project-location" type="text" maxlength="100" placeholder="অক্ষাংশ,দ্রাঘিমাংশ">
+            </label>
+            <button type="submit" class="span-all">প্রকল্প যোগ করুন</button>
+          </form>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- Vendored library (see lib/README.md); no CDN, so the dashboard works on an air-gapped network. -->
+  <script src="lib/signalr/signalr.min.js"></script>
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>

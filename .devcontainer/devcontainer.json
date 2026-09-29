@@ -1,0 +1,27 @@
+// GitHub Codespaces / Dev Containers environment for Magic Wall.
+// Gives the codespace Docker (for docker compose), the .NET 10 SDK and Python (for tools/).
+{
+  "name": "Magic Wall",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/dotnet:2": { "version": "10.0" },
+    "ghcr.io/devcontainers/features/python:1": { "version": "os-provided" }
+  },
+
+  // 8080 = docker compose, 5080 = `dotnet run` (launchSettings "http" profile).
+  "forwardPorts": [8080, 5080],
+  "portsAttributes": {
+    "8080": { "label": "Magic Wall (compose)", "onAutoForward": "notify" },
+    "5080": { "label": "Magic Wall (dotnet run)", "onAutoForward": "notify" }
+  },
+
+  // First start only: create .env with a random admin key (read it with `cat .env`).
+  "postCreateCommand": "[ -f .env ] || { cp .env.example .env && sed -i \"s|^MAGICWALL_ADMIN_KEY=.*|MAGICWALL_ADMIN_KEY=$(openssl rand -hex 24)|\" .env; }",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-dotnettools.csdevkit", "ms-azuretools.vscode-docker"]
+    }
+  }
+}

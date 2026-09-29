@@ -1,0 +1,22 @@
+# Build output
+bin/
+obj/
+
+# Secrets: the real admin key lives here
+.env
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+
+# Editors and OS
+.vs/
+.vscode/
+*.user
+*.swp
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ম্যাজিক ওয়াল</title>
+  <link rel="preload" href="fonts/hind-siliguri/hind-siliguri-bengali-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/fonts.css">
+  <link rel="stylesheet" href="css/wall.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">ম্যাজিক ওয়াল</span>
+    </div>
+    <div class="title-block">
+      <span id="module-eyebrow" class="title-eyebrow"></span>
+      <h1 id="module-title">লোড হচ্ছে…</h1>
+    </div>
+    <div class="status">
+      <span id="hub-status" class="live-badge" data-status="connecting"><span class="dot"></span><span class="label">সংযোগ হচ্ছে…</span></span>
+      <div class="clock">
+        <time id="clock"></time>
+        <span id="today"></span>
+      </div>
+    </div>
+  </header>
+
+  <main id="stage" class="stage"></main>
+
+  <!-- Vendored libraries (see lib/README.md); no CDN, so the wall works on an air-gapped network. -->
+  <script src="lib/signalr/signalr.min.js"></script>
+  <script src="lib/d3/d3.min.js"></script>
+  <script type="module" src="js/wall.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "_help": "Party name (exactly as entered in the admin dashboard) -> broadcast colour. Parties not listed get colours from the validated palette. The entries below are for the fictional demo parties; replace them with real parties before going on air.",
+  "colors": {
+    "দল ক": "#3987e5",
+    "দল খ": "#d95926",
+    "দল গ": "#199e70",
+    "দল ঘ": "#c98500",
+    "স্বতন্ত্র": "#8b95a7"
+  }
+}

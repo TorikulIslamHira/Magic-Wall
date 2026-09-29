@@ -1,0 +1,818 @@
+// Admin dashboard: puts modules on air, focuses the wall, and enters live data.
+// Every write goes through the REST API; the server broadcasts to all walls and
+// other admin screens over SignalR, so several producers stay in sync.
+import { adminKey, connectHub, getJson, sendJson } from './api.js';
+import { el, setChildren } from './dom.js';
+import { date, num, t } from './i18n.js';
+import { EVENT_COLORS, EVENT_TYPES, drawArrow, drawSurface, fitCanvas, fromPx, surfaceRect, toPx } from './pitch.js';
+
+const $ = selector => document.querySelector(selector);
+const A = t.admin;
+
+let wallState = null;
+
+// ---------- shared helpers ----------
+
+let toastTimer = 0;
+function toast(message, kind = 'ok') {
+  const node = $('#toast');
+  node.textContent = message;
+  node.dataset.kind = kind;
+  node.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { node.hidden = true; }, kind === 'error' ? 6000 : 2500);
+}
+
+/** Runs an action, reporting failure as a toast instead of an unhandled rejection. */
+async function attempt(action, successMessage) {
+  try {
+    const result = await action();
+    if (successMessage) toast(successMessage);
+    return result;
+  } catch (error) {
+    toast(error.message, 'error');
+    return undefined;
+  }
+}
+
+function fillSelect(select, items, { value, label, placeholder }) {
+  const previous = select.value;
+  setChildren(select,
+    placeholder ? el('option', { value: '' }, placeholder) : null,
+    items.map(item => el('option', { value: String(value(item)) }, label(item))));
+  if ([...select.options].some(o => o.value === previous)) select.value = previous;
+}
+
+// ---------- wall state ----------
+
+async function pushState(changes, successMessage) {
+  const { updatedAt, ...current } = wallState ?? {};
+  const next = await attempt(() => sendJson('PUT', '/api/wall/state', { ...current, ...changes }), successMessage);
+  if (next) setWallState(next);
+}
+
+function setWallState(state) {
+  wallState = state;
+  $('#on-air').textContent = A.modules[state.activeModule] ?? state.activeModule;
+  for (const button of document.querySelectorAll('[data-module]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.module === state.activeModule));
+  }
+  for (const tab of document.querySelectorAll('[data-tab]')) {
+    tab.classList.toggle('is-live', tab.dataset.tab === state.activeModule);
+  }
+}
+
+for (const button of document.querySelectorAll('[data-module]')) {
+  button.addEventListener('click', () =>
+    pushState({ activeModule: button.dataset.module }, A.onAir(A.modules[button.dataset.module])));
+}
+
+// ---------- tabs ----------
+
+function showTab(name) {
+  for (const tab of document.querySelectorAll('[data-tab]')) tab.setAttribute('aria-selected', String(tab.dataset.tab === name));
+  for (const panel of document.querySelectorAll('[data-panel]')) panel.hidden = panel.dataset.panel !== name;
+  if (name === 'Sports') sports.resizePitch();
+}
+
+for (const tab of document.querySelectorAll('[data-tab]')) {
+  tab.addEventListener('click', () => showTab(tab.dataset.tab));
+}
+
+// ---------- election editor ----------
+
+const election = {
+  candidates: [],
+  current: null,
+
+  async init() {
+    const [constituencies, candidates, districts] = await Promise.all([
+      getJson('/api/election/constituencies'),
+      getJson('/api/election/candidates'),
+      getJson('/maps/bd-districts.geojson')
+    ]);
+    this.candidates = candidates ?? [];
+    fillSelect($('#el-constituency'), constituencies ?? [], {
+      value: c => c.svgPathId,
+      label: c => c.name,
+      placeholder: A.election.chooseSeat
+    });
+    // Districts come from the map itself, so a seat can only be tied to a district the wall can draw.
+    const districtOptions = (districts?.features ?? [])
+      .map(f => f.properties)
+      .sort((a, b) => a.name_en.localeCompare(b.name_en));
+    fillSelect($('#el-new-seat-district'), districtOptions, {
+      value: d => d.code,
+      label: d => `${d.name_bn} (${d.name_en})`,
+      placeholder: A.election.chooseDistrict
+    });
+    const parties = [...new Set(this.candidates.map(c => c.partyName))].sort();
+    setChildren($('#el-parties'), parties.map(p => el('option', { value: p })));
+    this.render();
+  },
+
+  async addConstituency() {
+    const totalVoters = Number($('#el-new-seat-voters').value);
+    if (!Number.isInteger(totalVoters) || totalVoters < 0) return toast(A.wholeNumber(A.election.voters), 'error');
+
+    const created = await attempt(() => sendJson('POST', '/api/election/constituencies', {
+      name: $('#el-new-seat-name').value.trim(),
+      svgPathId: $('#el-new-seat-path').value.trim(),
+      districtCode: $('#el-new-seat-district').value,
+      totalVoters
+    }), A.election.seatAdded);
+
+    if (created) {
+      for (const id of ['#el-new-seat-name', '#el-new-seat-path']) $(id).value = '';
+      await this.init();
+      $('#el-constituency').value = created.svgPathId;
+      await this.load(created.svgPathId);
+    }
+  },
+
+  async addCandidate() {
+    const created = await attempt(() => sendJson('POST', '/api/election/candidates', {
+      name: $('#el-new-candidate-name').value.trim(),
+      partyName: $('#el-new-candidate-party').value.trim(),
+      symbol: $('#el-new-candidate-symbol').value.trim()
+    }), A.election.candidateAdded);
+
+    if (created) {
+      $('#el-new-candidate-name').value = '';
+      await this.init();
+    }
+  },
+
+  async load(svgPathId) {
+    this.current = svgPathId ? await getJson(`/api/election/results/${encodeURIComponent(svgPathId)}`) : null;
+    this.render();
+  },
+
+  render() {
+    const dto = this.current;
+    const tbody = $('#el-results');
+    $('#el-add').hidden = !dto;
+    $('#el-show').disabled = !dto;
+
+    if (!dto) {
+      $('#el-summary').textContent = '';
+      tbody.replaceChildren(el('tr', {}, el('td', { colspan: 4, class: 'muted' }, A.election.pickSeatFirst)));
+      return;
+    }
+
+    $('#el-summary').textContent =
+      A.election.summary(dto.totalVotesCast, dto.totalVoters, dto.turnoutPercentage);
+
+    tbody.replaceChildren(...dto.results.map(r => {
+      const input = el('input', { type: 'number', min: 0, step: 1, value: r.votesReceived, 'aria-label': A.election.votesFor(r.candidateName) });
+      const save = () => this.save(r.candidateId, input.value);
+      input.addEventListener('keydown', event => { if (event.key === 'Enter') save(); });
+      return el('tr', {},
+        el('td', {}, r.candidateName),
+        el('td', {}, r.partyName),
+        el('td', { class: 'num' }, input),
+        el('td', {}, el('button', { type: 'button', onclick: save }, A.save)));
+    }));
+    if (!dto.results.length) {
+      tbody.append(el('tr', {}, el('td', { colspan: 4, class: 'muted' }, A.election.noCandidates)));
+    }
+
+    const inSeat = new Set(dto.results.map(r => r.candidateId));
+    fillSelect($('#el-add-candidate'), this.candidates.filter(c => !inSeat.has(c.id)), {
+      value: c => c.id,
+      label: c => `${c.name} (${c.partyName})`,
+      placeholder: A.election.chooseCandidate
+    });
+  },
+
+  async save(candidateId, rawVotes) {
+    const votes = Number(rawVotes);
+    if (!Number.isInteger(votes) || votes < 0) {
+      toast(A.wholeNumber(A.election.votes), 'error');
+      return;
+    }
+    const updated = await attempt(() => sendJson('PUT', '/api/election/results', {
+      constituencyId: this.current.constituencyId,
+      candidateId: Number(candidateId),
+      votesReceived: votes
+    }), A.election.saved);
+    if (updated) {
+      this.current = updated;
+      this.render();
+    }
+  }
+};
+
+$('#el-constituency').addEventListener('change', event => attempt(() => election.load(event.target.value)));
+
+$('#el-show').addEventListener('click', () =>
+  pushState({ activeModule: 'Election', svgPathId: election.current.svgPathId }, A.onWall(election.current.name)));
+
+$('#el-add').addEventListener('submit', event => {
+  event.preventDefault();
+  const candidateId = $('#el-add-candidate').value;
+  if (!candidateId) {
+    toast(A.election.pickCandidate, 'error');
+    return;
+  }
+  election.save(candidateId, $('#el-add-votes').value);
+});
+
+$('#el-new-seat').addEventListener('submit', event => {
+  event.preventDefault();
+  election.addConstituency();
+});
+
+$('#el-new-candidate').addEventListener('submit', event => {
+  event.preventDefault();
+  election.addCandidate();
+});
+
+// ---------- sports editor ----------
+
+const sports = {
+  matches: [],
+  events: [],
+  start: null,     // { x, y } in 0–100 surface coordinates
+  end: null,
+  dragging: false,
+  rect: null,
+  size: { w: 0, h: 0 },
+  canvas: $('#sp-pitch'),
+
+  get match() {
+    return this.matches.find(m => String(m.id) === $('#sp-match').value) ?? null;
+  },
+
+  get playerId() {
+    return Number($('#sp-player').value) || null;
+  },
+
+  async init() {
+    this.matches = (await getJson('/api/sports/matches')) ?? [];
+    fillSelect($('#sp-match'), this.matches, {
+      value: m => m.id,
+      label: m => `${m.title} (${m.teamA} ${A.sports.versus} ${m.teamB})`,
+      placeholder: A.sports.chooseMatch
+    });
+    this.bindPitch();
+    await this.onMatchChange();
+  },
+
+  async onMatchChange() {
+    const match = this.match;
+    const players = match ? (await getJson(`/api/sports/players?matchId=${match.id}`)) ?? [] : [];
+    fillSelect($('#sp-player'), players, {
+      value: p => p.id,
+      label: p => `${p.name} (${p.team}${p.role ? `, ${p.role}` : ''})`,
+      placeholder: A.sports.choosePlayer
+    });
+    const types = EVENT_TYPES[match?.sport ?? 'Football'];
+    fillSelect($('#sp-type'), types, { value: type => type, label: type => t.sports.events[type] ?? type });
+    this.draw();
+    await this.loadEvents();
+  },
+
+  async loadEvents() {
+    const match = this.match;
+    const playerId = this.playerId;
+    this.events = match && playerId
+      ? ((await getJson(`/api/sports/events/${match.id}/${playerId}`))?.events ?? [])
+      : [];
+    this.renderEvents();
+    this.draw();
+  },
+
+  renderEvents() {
+    const tbody = $('#sp-events');
+    const point = (x, y) => (x == null ? '–' : `${x}, ${y}`);
+    if (!this.events.length) {
+      tbody.replaceChildren(el('tr', {}, el('td', { colspan: 5, class: 'muted' }, A.sports.noEvents)));
+      return;
+    }
+    tbody.replaceChildren(...[...this.events].reverse().map(e => el('tr', {},
+      el('td', {}, num(e.minute)),
+      el('td', {}, el('span', { class: 'swatch', style: `background:${EVENT_COLORS[e.eventType] ?? '#fff'}` }), ` ${t.sports.events[e.eventType] ?? e.eventType}`),
+      el('td', {}, point(e.x, e.y)),
+      el('td', {}, point(e.endX, e.endY)),
+      el('td', {}, el('button', { type: 'button', class: 'danger', onclick: () => this.remove(e.id) }, A.remove)))));
+  },
+
+  async submit() {
+    const match = this.match;
+    const playerId = this.playerId;
+    const minute = Number($('#sp-minute').value);
+    if (!match || !playerId) return toast(A.sports.pickMatchPlayer, 'error');
+    if (!this.start) return toast(A.sports.tapPitch, 'error');
+    if (!Number.isInteger(minute) || minute < 0) return toast(A.wholeNumber(A.sports.minute), 'error');
+
+    const created = await attempt(() => sendJson('POST', '/api/sports/events', {
+      matchId: match.id,
+      playerId,
+      eventType: $('#sp-type').value,
+      x: this.start.x,
+      y: this.start.y,
+      endX: this.end?.x ?? null,
+      endY: this.end?.y ?? null,
+      minute
+    }), A.sports.added);
+
+    if (created) {
+      this.clearPosition();
+      await this.loadEvents();
+    }
+  },
+
+  async remove(id) {
+    if (!confirm(A.sports.confirmDelete)) return;
+    const ok = await attempt(async () => { await sendJson('DELETE', `/api/sports/events/${id}`); return true; }, A.sports.deleted);
+    if (ok) await this.loadEvents();
+  },
+
+  clearPosition() {
+    this.start = null;
+    this.end = null;
+    $('#sp-coords').textContent = A.sports.noPosition;
+    this.draw();
+  },
+
+  // Tap = event position; drag = arrow from the press point to the release point.
+  bindPitch() {
+    const pointFor = event => {
+      const bounds = this.canvas.getBoundingClientRect();
+      return fromPx(this.rect, event.clientX - bounds.left, event.clientY - bounds.top);
+    };
+
+    this.canvas.addEventListener('pointerdown', event => {
+      if (!this.rect) return;
+      this.canvas.setPointerCapture(event.pointerId);
+      this.dragging = true;
+      this.start = pointFor(event);
+      this.end = null;
+      this.draw();
+    });
+
+    this.canvas.addEventListener('pointermove', event => {
+      if (!this.dragging) return;
+      this.end = pointFor(event);
+      this.draw();
+    });
+
+    const finish = () => {
+      if (!this.dragging) return;
+      this.dragging = false;
+      // A short drag is a tap with a shaky finger, not an arrow.
+      if (this.end && Math.hypot(this.end.x - this.start.x, this.end.y - this.start.y) < 2) this.end = null;
+      $('#sp-coords').textContent = this.end
+        ? A.sports.fromTo(this.start.x, this.start.y, this.end.x, this.end.y)
+        : A.sports.at(this.start.x, this.start.y);
+      this.draw();
+    };
+    this.canvas.addEventListener('pointerup', finish);
+    this.canvas.addEventListener('pointercancel', finish);
+
+    new ResizeObserver(() => this.resizePitch()).observe(this.canvas);
+  },
+
+  resizePitch() {
+    if (!this.canvas.offsetParent) return; // hidden tab: nothing to measure yet
+    this.size = fitCanvas(this.canvas);
+    this.draw();
+  },
+
+  draw() {
+    const { w, h } = this.size;
+    if (!w || !h) return;
+    const ctx = this.canvas.getContext('2d');
+    this.rect = surfaceRect(w, h, this.match?.sport ?? 'Football', 12);
+    ctx.clearRect(0, 0, w, h);
+    drawSurface(ctx, this.rect);
+
+    // Existing events, faded, for context.
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    for (const e of this.events) {
+      const p = toPx(this.rect, e.x, e.y);
+      if (e.endX != null) drawArrow(ctx, p, toPx(this.rect, e.endX, e.endY), EVENT_COLORS[e.eventType] ?? '#fff', 2);
+      dot(ctx, p, 4, EVENT_COLORS[e.eventType] ?? '#fff');
+    }
+    ctx.restore();
+
+    if (this.start) {
+      const color = EVENT_COLORS[$('#sp-type').value] ?? '#fff';
+      const p = toPx(this.rect, this.start.x, this.start.y);
+      if (this.end) drawArrow(ctx, p, toPx(this.rect, this.end.x, this.end.y), color, 3);
+      dot(ctx, p, 7, color, '#0f172a');
+    }
+  }
+};
+
+function dot(ctx, p, radius, fill, stroke) {
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) {
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = stroke;
+    ctx.stroke();
+  }
+}
+
+$('#sp-match').addEventListener('change', () => attempt(() => sports.onMatchChange()));
+$('#sp-player').addEventListener('change', () => attempt(() => sports.loadEvents()));
+$('#sp-type').addEventListener('change', () => sports.draw());
+$('#sp-clear').addEventListener('click', () => sports.clearPosition());
+$('#sp-form').addEventListener('submit', event => {
+  event.preventDefault();
+  sports.submit();
+});
+$('#sp-show').addEventListener('click', () => {
+  const match = sports.match;
+  const playerId = sports.playerId;
+  if (!match || !playerId) return toast(A.sports.pickMatchPlayer, 'error');
+  pushState({ activeModule: 'Sports', matchId: match.id, playerId }, A.sports.onWall);
+});
+
+// ---------- war editor ----------
+
+const war = {
+  zones: [],
+
+  get zone() {
+    return this.zones.find(z => String(z.id) === $('#war-zone').value) ?? null;
+  },
+
+  async init() {
+    this.zones = (await getJson('/api/war/zones')) ?? [];
+    fillSelect($('#war-zone'), this.zones, {
+      value: z => z.id,
+      label: z => z.regionName,
+      placeholder: A.war.allZones
+    });
+    const forces = [...new Set(this.zones.flatMap(z => z.events.map(e => e.controllingForce)))].sort();
+    $('#war-forces').replaceChildren(...forces.map(force => el('option', { value: force })));
+    this.render();
+  },
+
+  render() {
+    const zone = this.zone;
+    const tbody = $('#war-events');
+    $('#war-event-form').hidden = !zone;
+
+    if (!zone) {
+      tbody.replaceChildren(el('tr', {}, el('td', { colspan: 5, class: 'muted' }, A.war.pickZoneFirst)));
+      return;
+    }
+    if (!zone.events.length) {
+      tbody.replaceChildren(el('tr', {}, el('td', { colspan: 5, class: 'muted' }, A.war.noEvents)));
+      return;
+    }
+    tbody.replaceChildren(...[...zone.events].reverse().map(e => el('tr', {},
+      el('td', {}, date(e.date)),
+      el('td', {}, e.controllingForce),
+      el('td', { class: 'num' }, num(e.casualties)),
+      el('td', { class: 'wrap' }, e.description),
+      el('td', {}, el('button', { type: 'button', class: 'danger', onclick: () => this.removeEvent(e.id) }, A.remove)))));
+  },
+
+  async addEvent() {
+    const zone = this.zone;
+    const casualties = Number($('#war-event-casualties').value);
+    if (!zone) return toast(A.war.pickZone, 'error');
+    if (!Number.isInteger(casualties) || casualties < 0) return toast(A.wholeNumber(A.war.casualties), 'error');
+
+    const created = await attempt(() => sendJson('POST', '/api/war/events', {
+      conflictZoneId: zone.id,
+      date: $('#war-event-date').value,
+      controllingForce: $('#war-event-force').value.trim(),
+      casualties,
+      description: $('#war-event-description').value.trim()
+    }), A.war.added);
+
+    if (created) {
+      $('#war-event-casualties').value = '0';
+      $('#war-event-description').value = '';
+      await this.init();
+    }
+  },
+
+  async removeEvent(id) {
+    if (!confirm(A.war.confirmDelete)) return;
+    const ok = await attempt(async () => { await sendJson('DELETE', `/api/war/events/${id}`); return true; }, A.war.deleted);
+    if (ok) await this.init();
+  },
+
+  async addZone() {
+    const created = await attempt(() => sendJson('POST', '/api/war/zones', {
+      regionName: $('#war-zone-name').value.trim(),
+      svgPathId: $('#war-zone-path').value.trim()
+    }), A.war.zoneAdded);
+
+    if (created) {
+      $('#war-zone-name').value = '';
+      $('#war-zone-path').value = '';
+      await this.init();
+      $('#war-zone').value = String(created.id);
+      this.render();
+    }
+  }
+};
+
+$('#war-zone').addEventListener('change', () => war.render());
+$('#war-event-date').value = new Date().toISOString().slice(0, 10);   // most entries are today's news
+
+$('#war-focus').addEventListener('submit', event => {
+  event.preventDefault();
+  const zone = war.zone;
+  pushState(
+    { activeModule: 'War', regionName: zone?.regionName ?? null, date: $('#war-date').value || null },
+    zone ? A.onWall(zone.regionName) : A.war.trackerOnAir);
+});
+
+$('#war-event-form').addEventListener('submit', event => {
+  event.preventDefault();
+  war.addEvent();
+});
+
+$('#war-zone-form').addEventListener('submit', event => {
+  event.preventDefault();
+  war.addZone();
+});
+
+// ---------- budget editor ----------
+
+/** Parses a non-negative number field; returns null (after a toast) when invalid. */
+function readAmount(input, label, max = Infinity) {
+  const value = Number(input.value);
+  if (input.value.trim() === '' || !Number.isFinite(value) || value < 0 || value > max) {
+    toast(max === Infinity ? A.atLeastZero(label) : A.between(label, max), 'error');
+    return null;
+  }
+  return value;
+}
+
+const budget = {
+  sectors: [],
+
+  get year() {
+    return $('#budget-year').value || null;
+  },
+
+  get sector() {
+    return this.sectors.find(s => String(s.id) === $('#budget-project-sector').value) ?? null;
+  },
+
+  async init() {
+    const years = (await getJson('/api/budget/fiscal-years')) ?? [];
+    fillSelect($('#budget-year'), years, { value: y => y, label: y => y, placeholder: years.length ? null : A.budget.noBudget });
+    await this.loadSectors();
+  },
+
+  async loadSectors() {
+    const year = this.year;
+    this.sectors = year ? ((await getJson(`/api/budget/sectors?fiscalYear=${encodeURIComponent(year)}`)) ?? []) : [];
+    if (year && !$('#budget-sector-year').value) $('#budget-sector-year').value = year;
+
+    fillSelect($('#budget-project-sector'), this.sectors, {
+      value: s => s.id,
+      label: s => s.name,
+      placeholder: this.sectors.length ? null : A.budget.addSectorFirst
+    });
+    this.renderSectors();
+    this.renderProjects();
+  },
+
+  renderSectors() {
+    const tbody = $('#budget-sectors');
+    if (!this.sectors.length) {
+      tbody.replaceChildren(el('tr', {}, el('td', { colspan: 4, class: 'muted' }, A.budget.noSectors)));
+      return;
+    }
+    tbody.replaceChildren(...this.sectors.map(sector => {
+      const allocation = el('input', { type: 'number', min: 0, step: 'any', value: sector.totalAllocation, 'aria-label': A.budget.allocationFor(sector.name) });
+      return el('tr', {},
+        el('td', {}, sector.name),
+        el('td', { class: 'num' }, allocation),
+        el('td', { class: 'num' }, num(sector.megaProjects.length)),
+        el('td', {}, el('button', { type: 'button', onclick: () => this.saveSector(sector, allocation) }, A.save)));
+    }));
+  },
+
+  renderProjects() {
+    const sector = this.sector;
+    const tbody = $('#budget-projects');
+    $('#budget-project-form').hidden = !sector;
+
+    if (!sector) {
+      tbody.replaceChildren(el('tr', {}, el('td', { colspan: 5, class: 'muted' }, A.budget.pickSector)));
+      return;
+    }
+    if (!sector.megaProjects.length) {
+      tbody.replaceChildren(el('tr', {}, el('td', { colspan: 5, class: 'muted' }, A.budget.noProjects)));
+      return;
+    }
+    tbody.replaceChildren(...sector.megaProjects.map(project => {
+      const inputs = {
+        amount: el('input', { type: 'number', min: 0, step: 'any', value: project.budgetAmount, 'aria-label': A.budget.amountFor(project.name) }),
+        completion: el('input', { type: 'number', min: 0, max: 100, step: 'any', value: project.completionPercentage, 'aria-label': A.budget.completionFor(project.name) }),
+        location: el('input', { type: 'text', maxlength: 100, value: project.geoLocation, 'aria-label': A.budget.locationFor(project.name) })
+      };
+      return el('tr', {},
+        el('td', {}, project.name),
+        el('td', { class: 'num' }, inputs.amount),
+        el('td', { class: 'num' }, inputs.completion),
+        el('td', {}, inputs.location),
+        el('td', {}, el('div', { class: 'actions' },
+          el('button', { type: 'button', onclick: () => this.saveProject(sector, project, inputs) }, A.save),
+          el('button', { type: 'button', class: 'danger', onclick: () => this.removeProject(project) }, A.remove))));
+    }));
+  },
+
+  async saveSector(sector, input) {
+    const totalAllocation = readAmount(input, A.budget.allocation);
+    if (totalAllocation === null) return;
+    const ok = await attempt(async () => {
+      await sendJson('PUT', `/api/budget/sectors/${sector.id}`, { name: sector.name, fiscalYear: sector.fiscalYear, totalAllocation });
+      return true;
+    }, A.budget.allocationSaved);
+    if (ok) await this.loadSectors();
+  },
+
+  async addSector() {
+    const totalAllocation = readAmount($('#budget-sector-allocation'), A.budget.allocation);
+    if (totalAllocation === null) return;
+    const fiscalYear = $('#budget-sector-year').value.trim();
+
+    const created = await attempt(() => sendJson('POST', '/api/budget/sectors', {
+      name: $('#budget-sector-name').value.trim(),
+      fiscalYear,
+      totalAllocation
+    }), A.budget.sectorAdded);
+
+    if (created) {
+      $('#budget-sector-name').value = '';
+      $('#budget-sector-allocation').value = '0';
+      await this.init();
+      $('#budget-year').value = fiscalYear;   // a new fiscal year appears in the list; switch to it
+      await this.loadSectors();
+    }
+  },
+
+  async saveProject(sector, project, inputs) {
+    const budgetAmount = readAmount(inputs.amount, A.budget.amount);
+    const completionPercentage = budgetAmount === null ? null : readAmount(inputs.completion, A.budget.completion, 100);
+    if (budgetAmount === null || completionPercentage === null) return;
+
+    const ok = await attempt(async () => {
+      await sendJson('PUT', `/api/budget/projects/${project.id}`, {
+        budgetSectorId: sector.id,
+        name: project.name,
+        budgetAmount,
+        completionPercentage,
+        geoLocation: inputs.location.value.trim()
+      });
+      return true;
+    }, A.budget.projectSaved);
+    if (ok) await this.loadSectors();
+  },
+
+  async addProject() {
+    const sector = this.sector;
+    if (!sector) return toast(A.budget.pickSectorFirst, 'error');
+    const budgetAmount = readAmount($('#budget-project-amount'), A.budget.amount);
+    const completionPercentage = budgetAmount === null ? null : readAmount($('#budget-project-completion'), A.budget.completion, 100);
+    if (budgetAmount === null || completionPercentage === null) return;
+
+    const created = await attempt(() => sendJson('POST', '/api/budget/projects', {
+      budgetSectorId: sector.id,
+      name: $('#budget-project-name').value.trim(),
+      budgetAmount,
+      completionPercentage,
+      geoLocation: $('#budget-project-location').value.trim()
+    }), A.budget.projectAdded);
+
+    if (created) {
+      for (const id of ['#budget-project-name', '#budget-project-location']) $(id).value = '';
+      $('#budget-project-amount').value = '0';
+      $('#budget-project-completion').value = '0';
+      await this.loadSectors();
+    }
+  },
+
+  async removeProject(project) {
+    if (!confirm(A.budget.confirmDelete(project.name))) return;
+    const ok = await attempt(async () => { await sendJson('DELETE', `/api/budget/projects/${project.id}`); return true; }, A.budget.projectDeleted);
+    if (ok) await this.loadSectors();
+  }
+};
+
+$('#budget-year').addEventListener('change', () => {
+  $('#budget-sector-year').value = budget.year ?? '';
+  attempt(() => budget.loadSectors());
+});
+$('#budget-project-sector').addEventListener('change', () => budget.renderProjects());
+$('#budget-show').addEventListener('click', () =>
+  pushState({ activeModule: 'Budget', fiscalYear: budget.year }, A.budget.onAir(budget.year)));
+$('#budget-sector-form').addEventListener('submit', event => {
+  event.preventDefault();
+  budget.addSector();
+});
+$('#budget-project-form').addEventListener('submit', event => {
+  event.preventDefault();
+  budget.addProject();
+});
+
+// ---------- admin key ----------
+
+const keyInput = $('#admin-key');
+function renderKeyStatus() {
+  const hasKey = Boolean(adminKey.get());
+  keyInput.closest('.key-field').classList.toggle('missing', !hasKey);
+  $('#key-status').textContent = hasKey ? A.key.saved : A.key.missing;
+}
+keyInput.value = adminKey.get();
+keyInput.addEventListener('input', () => {
+  adminKey.set(keyInput.value.trim());
+  renderKeyStatus();
+});
+renderKeyStatus();
+
+// ---------- live wall preview ----------
+
+// The iframe renders the real wall at 1920x1080; scale it to fill its box.
+const preview = $('#preview');
+const previewFrame = preview.querySelector('iframe');
+new ResizeObserver(() => {
+  previewFrame.style.transform = `scale(${preview.clientWidth / 1920})`;
+}).observe(preview);
+
+// ---------- live sync ----------
+
+function onDataChanged({ module, key }) {
+  // Another producer edited what this screen is showing: refresh it.
+  if (module === 'Election' && election.current?.svgPathId === key) attempt(() => election.load(key));
+  if (module === 'Sports' && key === `${sports.match?.id}:${sports.playerId}`) attempt(() => sports.loadEvents());
+  if (module === 'War') attempt(() => war.init());
+  if (module === 'Budget') attempt(() => budget.init());
+}
+
+const STATUS_LABELS = A.status;
+
+connectHub({
+  on: { StateChanged: setWallState, DataChanged: onDataChanged },
+  onStatus: status => {
+    const node = $('#hub-status');
+    node.dataset.status = status;
+    node.textContent = STATUS_LABELS[status] ?? status;
+  },
+  onConnected: () => attempt(async () => setWallState(await getJson('/api/wall/state')))
+});
+
+// ---------- start ----------
+
+// Opening the dashboard mid-show lands the editors on whatever is live.
+async function focusEditorsOn(state) {
+  const hasOption = (select, value) => [...select.options].some(o => o.value === value);
+
+  const constituency = $('#el-constituency');
+  if (state.svgPathId && hasOption(constituency, state.svgPathId)) {
+    constituency.value = state.svgPathId;
+    await election.load(state.svgPathId);
+  }
+
+  const match = $('#sp-match');
+  if (state.matchId && hasOption(match, String(state.matchId))) {
+    match.value = String(state.matchId);
+    await sports.onMatchChange();
+    const player = $('#sp-player');
+    if (state.playerId && hasOption(player, String(state.playerId))) {
+      player.value = String(state.playerId);
+      await sports.loadEvents();
+    }
+  }
+
+  const zone = war.zones.find(z => z.regionName.toLowerCase() === state.regionName?.toLowerCase());
+  if (zone) {
+    $('#war-zone').value = String(zone.id);
+    war.render();
+  }
+  if (state.date) $('#war-date').value = state.date;
+
+  const year = $('#budget-year');
+  if (state.fiscalYear && hasOption(year, state.fiscalYear)) {
+    year.value = state.fiscalYear;
+    await budget.loadSectors();
+  }
+}
+
+const initial = await attempt(() => getJson('/api/wall/state'));
+if (initial) setWallState(initial);
+showTab(initial?.activeModule ?? 'Election');
+await Promise.all([
+  attempt(() => election.init()),
+  attempt(() => sports.init()),
+  attempt(() => war.init()),
+  attempt(() => budget.init())
+]);
+if (initial) await attempt(() => focusEditorsOn(initial));
