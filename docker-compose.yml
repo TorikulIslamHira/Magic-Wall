@@ -19,6 +19,13 @@ services:
     environment:
       # Required: compose refuses to start without it, rather than running with admin writes disabled.
       Admin__ApiKey: "${MAGICWALL_ADMIN_KEY:?Set MAGICWALL_ADMIN_KEY in .env (see .env.example)}"
+      # Local testing only: the dashboard pre-fills the key. Keep false on a shared network.
+      Admin__AutoFillKey: "${MAGICWALL_ADMIN_AUTOFILL:-false}"
+      # First admin account, created only when no users exist yet.
+      Auth__BootstrapAdmin__Password: "${MAGICWALL_BOOTSTRAP_PASSWORD:-}"
+      # Local testing only: demo accounts field1 / desk1 / sports1 / admin.
+      Auth__SeedDemoUsers: "${MAGICWALL_DEMO_USERS:-false}"
+      Sports__Feed__Enabled: "${MAGICWALL_SPORTS_FEED:-true}"
       ConnectionStrings__MagicWall: "Data Source=/data/magicwall.db"
 
     volumes:

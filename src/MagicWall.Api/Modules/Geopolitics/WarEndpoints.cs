@@ -1,3 +1,4 @@
+using MagicWall.Api.Auth;
 using MagicWall.Api.Data;
 using MagicWall.Api.Hubs;
 using MagicWall.Api.Wall;
@@ -49,9 +50,9 @@ public static class WarEndpoints
         group.MapGet("/timeline/{regionName}/{date}", GetTimelineUpToDate);
         group.MapGet("/zones", GetZones);
 
-        group.MapPost("/zones", CreateZone).RequireAdminKey();
-        group.MapPost("/events", CreateEvent).RequireAdminKey();
-        group.MapDelete("/events/{id:int}", DeleteEvent).RequireAdminKey();
+        group.MapPost("/zones", CreateZone).RequireAuthorization(Policies.EditDesk);
+        group.MapPost("/events", CreateEvent).RequireAuthorization(Policies.EditDesk);
+        group.MapDelete("/events/{id:int}", DeleteEvent).RequireAuthorization(Policies.EditDesk);
 
         return app;
     }

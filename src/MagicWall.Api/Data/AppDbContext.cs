@@ -1,3 +1,4 @@
+using MagicWall.Api.Auth;
 using MagicWall.Api.Modules.Budget;
 using MagicWall.Api.Modules.Election;
 using MagicWall.Api.Modules.Geopolitics;
@@ -12,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Constituency> Constituencies => Set<Constituency>();
     public DbSet<Candidate> Candidates => Set<Candidate>();
     public DbSet<ElectionResult> ElectionResults => Set<ElectionResult>();
+    public DbSet<ElectionResultSubmission> ElectionResultSubmissions => Set<ElectionResultSubmission>();
 
     // Module B: Sports
     public DbSet<Match> Matches => Set<Match>();
@@ -25,6 +27,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Module D: Budget & Economy
     public DbSet<BudgetSector> BudgetSectors => Set<BudgetSector>();
     public DbSet<MegaProject> MegaProjects => Set<MegaProject>();
+
+    // Newsroom accounts (roles: FieldReporter, DeskReporter, SportsDesk, Admin)
+    public DbSet<AppUser> Users => Set<AppUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

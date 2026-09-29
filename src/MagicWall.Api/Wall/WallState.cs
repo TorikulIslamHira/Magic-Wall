@@ -56,7 +56,16 @@ public static class WallEvents
 
     /// <summary>Payload: <see cref="DataChangedMessage"/>. The wall refetches if it shows that data.</summary>
     public const string DataChanged = "DataChanged";
+
+    /// <summary>
+    /// Payload: <see cref="QueueChangedMessage"/>. The approval queue changed (new submission,
+    /// feed data, approval or rejection). Admin screens refresh their queue; the wall ignores it.
+    /// Carries only counts, never unapproved values.
+    /// </summary>
+    public const string QueueChanged = "QueueChanged";
 }
+
+public record QueueChangedMessage(WallModule Module, int Pending);
 
 /// <param name="Key">Module-specific: a SvgPathId for Election, "matchId:playerId" for Sports.</param>
 public record DataChangedMessage(WallModule Module, string Key);
@@ -66,4 +75,8 @@ public static class WallHubExtensions
     public static Task BroadcastDataChangedAsync(
         this IHubContext<MagicWallHub> hub, WallModule module, string key, CancellationToken ct = default) =>
         hub.Clients.All.SendAsync(WallEvents.DataChanged, new DataChangedMessage(module, key), ct);
+
+    public static Task BroadcastQueueChangedAsync(
+        this IHubContext<MagicWallHub> hub, WallModule module, int pending, CancellationToken ct = default) =>
+        hub.Clients.All.SendAsync(WallEvents.QueueChanged, new QueueChangedMessage(module, pending), ct);
 }

@@ -29,6 +29,12 @@
 
   <main id="stage" class="stage"></main>
 
+  <!-- Fullscreen toggle for touch presenters (also: F key or double-click the background). -->
+  <button id="fullscreen-toggle" class="fullscreen-toggle" type="button" aria-pressed="false" aria-label="পূর্ণ পর্দা">
+    <svg class="icon-enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+    <svg class="icon-exit" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg>
+  </button>
+
   <!-- Vendored libraries (see lib/README.md); no CDN, so the wall works on an air-gapped network. -->
   <script src="lib/signalr/signalr.min.js"></script>
   <script src="lib/d3/d3.min.js"></script>

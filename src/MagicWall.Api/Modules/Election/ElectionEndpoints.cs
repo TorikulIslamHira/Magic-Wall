@@ -1,3 +1,4 @@
+using MagicWall.Api.Auth;
 using MagicWall.Api.Data;
 using MagicWall.Api.Hubs;
 using MagicWall.Api.Wall;
@@ -37,13 +38,17 @@ public record ConstituencySummaryDto(
     string? LeadingCandidate,
     int LeadMargin);
 
-public record CandidateDto(int Id, string Name, string PartyName, string Symbol);
+public record CandidateDto(int Id, string Name, string PartyName, string Symbol, int? ConstituencyId = null);
+
+/// <summary>A candidate standing in one seat, with their currently APPROVED votes (null = none yet).</summary>
+public record SeatCandidateDto(int CandidateId, string Name, string PartyName, string Symbol, int? ApprovedVotes);
 
 public record UpsertResultRequest(int ConstituencyId, int CandidateId, int VotesReceived);
 
 public record SaveConstituencyRequest(string Name, string SvgPathId, int TotalVoters, string? DistrictCode);
 
-public record SaveCandidateRequest(string Name, string PartyName, string? Symbol);
+/// <param name="ConstituencyId">The seat they stand in (recommended, so field reporters can find them).</param>
+public record SaveCandidateRequest(string Name, string PartyName, string? Symbol, int? ConstituencyId = null);
 
 public static class ElectionEndpoints
 {
@@ -54,11 +59,12 @@ public static class ElectionEndpoints
         group.MapGet("/results/{svgPathId}", GetResultsBySvgPathId);
         group.MapGet("/constituencies", GetConstituencySummaries);
         group.MapGet("/candidates", GetCandidates);
+        group.MapGet("/constituencies/{svgPathId}/candidates", GetSeatCandidates);
 
-        group.MapPut("/results", UpsertResult).RequireAdminKey();
-        group.MapPost("/constituencies", CreateConstituency).RequireAdminKey();
-        group.MapPut("/constituencies/{id:int}", UpdateConstituency).RequireAdminKey();
-        group.MapPost("/candidates", CreateCandidate).RequireAdminKey();
+        group.MapPut("/results", UpsertResult).RequireAuthorization(Policies.EditDesk);
+        group.MapPost("/constituencies", CreateConstituency).RequireAuthorization(Policies.EditDesk);
+        group.MapPut("/constituencies/{id:int}", UpdateConstituency).RequireAuthorization(Policies.EditDesk);
+        group.MapPost("/candidates", CreateCandidate).RequireAuthorization(Policies.EditDesk);
 
         return app;
     }
@@ -114,9 +120,14 @@ public static class ElectionEndpoints
         return TypedResults.NoContent();
     }
 
-    private static async Task<Results<Created<CandidateDto>, ValidationProblem>> CreateCandidate(
+    private static async Task<Results<Created<CandidateDto>, NotFound<string>, ValidationProblem>> CreateCandidate(
         SaveCandidateRequest request, AppDbContext db, CancellationToken ct)
     {
+        if (request.ConstituencyId is { } seatId && !await db.Constituencies.AnyAsync(c => c.Id == seatId, ct))
+        {
+            return TypedResults.NotFound("আসনটি পাওয়া যায়নি।");
+        }
+
         var name = request.Name?.Trim() ?? string.Empty;
         var partyName = request.PartyName?.Trim() ?? string.Empty;
         var symbol = request.Symbol?.Trim() ?? string.Empty;
@@ -127,14 +138,38 @@ public static class ElectionEndpoints
         if (symbol.Length > 200) errors["symbol"] = ["প্রতীক সর্বোচ্চ ২০০ অক্ষর হতে পারে।"];
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
-        var candidate = new Candidate { Name = name, PartyName = partyName, Symbol = symbol };
+        var candidate = new Candidate { Name = name, PartyName = partyName, Symbol = symbol, ConstituencyId = request.ConstituencyId };
         db.Candidates.Add(candidate);
         await db.SaveChangesAsync(ct);
 
-        // No broadcast: a candidate appears on the wall only once votes are entered for a seat.
+        // No broadcast: a candidate appears on the wall only once votes are approved for a seat.
         return TypedResults.Created(
             $"/api/election/candidates/{candidate.Id}",
-            new CandidateDto(candidate.Id, name, partyName, symbol));
+            new CandidateDto(candidate.Id, name, partyName, symbol, candidate.ConstituencyId));
+    }
+
+    /// <summary>
+    /// Everyone standing in a seat (nominated there, or already with votes there) and their
+    /// approved votes: the list a field reporter submits against.
+    /// </summary>
+    private static async Task<Results<Ok<List<SeatCandidateDto>>, NotFound>> GetSeatCandidates(
+        string svgPathId, AppDbContext db, CancellationToken ct)
+    {
+        var seatId = await db.Constituencies.Where(c => c.SvgPathId == svgPathId).Select(c => (int?)c.Id).SingleOrDefaultAsync(ct);
+        if (seatId is null) return TypedResults.NotFound();
+
+        var candidates = await db.Candidates.AsNoTracking()
+            .Where(c => c.ConstituencyId == seatId || c.Results.Any(r => r.ConstituencyId == seatId))
+            .Select(c => new
+            {
+                c.Id, c.Name, c.PartyName, c.Symbol,
+                Votes = c.Results.Where(r => r.ConstituencyId == seatId).Select(r => (int?)r.VotesReceived).FirstOrDefault()
+            })
+            .OrderByDescending(c => c.Votes ?? -1)
+            .ThenBy(c => c.PartyName)
+            .ToListAsync(ct);
+
+        return TypedResults.Ok(candidates.Select(c => new SeatCandidateDto(c.Id, c.Name, c.PartyName, c.Symbol, c.Votes)).ToList());
     }
 
     private static (string Name, string SvgPathId, string? DistrictCode, Dictionary<string, string[]> Errors) ValidateConstituency(
@@ -209,7 +244,7 @@ public static class ElectionEndpoints
             .AsNoTracking()
             .OrderBy(c => c.PartyName)
             .ThenBy(c => c.Name)
-            .Select(c => new CandidateDto(c.Id, c.Name, c.PartyName, c.Symbol))
+            .Select(c => new CandidateDto(c.Id, c.Name, c.PartyName, c.Symbol, c.ConstituencyId))
             .ToListAsync(ct);
 
     private static async Task<Results<Ok<ConstituencyResultsDto>, NotFound<string>, ValidationProblem>> UpsertResult(

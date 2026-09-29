@@ -11,6 +11,7 @@ internal class MatchConfiguration : IEntityTypeConfiguration<Match>
         builder.Property(m => m.TeamA).HasMaxLength(100).IsRequired();
         builder.Property(m => m.TeamB).HasMaxLength(100).IsRequired();
         builder.Property(m => m.Sport).HasConversion<string>().HasMaxLength(20);
+        builder.Property(m => m.FeedMatchId).HasMaxLength(100);
 
         builder.HasIndex(m => m.MatchDate);
     }
@@ -33,6 +34,16 @@ internal class MatchEventConfiguration : IEntityTypeConfiguration<MatchEvent>
     public void Configure(EntityTypeBuilder<MatchEvent> builder)
     {
         builder.Property(e => e.EventType).HasConversion<string>().HasMaxLength(30);
+        builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(e => e.Source).HasConversion<string>().HasMaxLength(20);
+        builder.Property(e => e.ExternalId).HasMaxLength(100);
+        builder.Property(e => e.SubmittedBy).HasMaxLength(60).IsRequired();
+        builder.Property(e => e.ReviewedBy).HasMaxLength(60);
+
+        // A provider event is stored once, however often it is polled.
+        builder.HasIndex(e => e.ExternalId).IsUnique().HasFilter("ExternalId IS NOT NULL");
+        // The sports desk's queue.
+        builder.HasIndex(e => new { e.Status, e.SubmittedAt });
 
         builder.HasOne(e => e.Match)
             .WithMany(m => m.Events)

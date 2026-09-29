@@ -1,16 +1,8 @@
 // Shared fetch + SignalR plumbing for the wall and the admin dashboard.
 // Expects the SignalR browser client to be loaded as a classic script (global `signalR`).
 
-const ADMIN_KEY_STORAGE = 'magicwall.adminKey';
-
-export const adminKey = {
-  get() {
-    try { return sessionStorage.getItem(ADMIN_KEY_STORAGE) ?? ''; } catch { return ''; }
-  },
-  set(value) {
-    try { sessionStorage.setItem(ADMIN_KEY_STORAGE, value); } catch { /* storage blocked: key lives for this page only */ }
-  }
-};
+/** Fired when a write comes back 401 (session expired or signed out elsewhere). */
+export const UNAUTHORIZED_EVENT = 'magicwall:unauthorized';
 
 /** GET JSON. Resolves to null on 404 so callers can show "not found" without try/catch. */
 export async function getJson(url, signal) {
@@ -20,31 +12,52 @@ export async function getJson(url, signal) {
   return res.json();
 }
 
-/** Admin write. Sends the admin key and turns ProblemDetails into a readable Error. */
+/**
+ * Admin write. Authenticated by the login cookie (same-origin, sent automatically); logs
+ * every request with its status (open the browser console to trace a save), and turns
+ * failures into a readable Error carrying `.status`.
+ */
 export async function sendJson(method, url, body) {
-  const res = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Admin-Key': adminKey.get() },
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
+  const started = performance.now();
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+  } catch (networkError) {
+    console.error(`[admin] ${method} ${url} → network error`, networkError);
+    throw Object.assign(new Error('সংরক্ষণ ব্যর্থ: সার্ভারে পৌঁছানো যাচ্ছে না। সার্ভার চালু আছে কি না দেখুন।'), { status: 0 });
+  }
 
-  if (res.status === 401) throw new Error('অ্যাডমিন কী সঠিক নয়। ওপরের "অ্যাডমিন কী" ঘরটি দেখুন।');
-  if (res.status === 204) return null;
-
-  const text = await res.text();
+  const ms = Math.round(performance.now() - started);
+  const text = res.status === 204 ? '' : await res.text();
   const data = text ? safeParse(text) : null;
-  if (!res.ok) throw new Error(problemMessage(res, data, text));
-  return data;
+
+  if (res.ok) {
+    console.log(`[admin] ${method} ${url} → ${res.status} (${ms} ms)`, body ?? '');
+    return data;
+  }
+
+  console.error(`[admin] ${method} ${url} → ${res.status} FAILED (${ms} ms)`, { request: body, response: data ?? text });
+  if (res.status === 401) window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+  throw Object.assign(new Error(failureMessage(res.status, data, text)), { status: res.status });
 }
 
 function safeParse(text) {
   try { return JSON.parse(text); } catch { return null; }
 }
 
-function problemMessage(res, data, text) {
-  if (data?.errors) return Object.values(data.errors).flat().join(' ');
-  if (typeof data === 'string') return data;
-  return data?.detail ?? data?.title ?? (text || `${res.status} ${res.statusText}`);
+function failureMessage(status, data, text) {
+  const prefix = `সংরক্ষণ ব্যর্থ (HTTP ${status})`;
+  if (status === 401) return `${prefix}: সেশন শেষ হয়েছে — আবার লগইন করুন।`;
+  if (status === 403 && !data?.detail) return `${prefix}: এই কাজের অনুমতি আপনার নেই।`;
+  if (status === 403) return `${prefix}: ${data.detail}`;
+  if (status >= 500 && status !== 503) return `${prefix}: সার্ভার ত্রুটি — সার্ভারের লগ দেখুন (docker compose logs)।`;
+  if (data?.errors) return `${prefix}: ${Object.values(data.errors).flat().join(' ')}`;
+  if (typeof data === 'string') return `${prefix}: ${data}`;
+  return `${prefix}: ${data?.detail ?? data?.title ?? text ?? ''}`.trim();
 }
 
 /**
@@ -52,7 +65,7 @@ function problemMessage(res, data, text) {
  * short drops, and a retry loop covers the initial connect and longer outages.
  * onConnected fires after every (re)connect so callers can resync missed updates.
  */
-export function connectHub({ on = {}, onStatus = () => {}, onConnected = () => {} }) {
+export function connectHub({ on = {}, onStatus = () => {}, onConnected = () => {}, tag = 'hub' }) {
   const connection = new signalR.HubConnectionBuilder()
     .withUrl('/hubs/magicwall')
     .withAutomaticReconnect([0, 1000, 3000, 5000, 10000])
@@ -61,20 +74,27 @@ export function connectHub({ on = {}, onStatus = () => {}, onConnected = () => {
 
   for (const [name, handler] of Object.entries(on)) connection.on(name, handler);
 
-  connection.onreconnecting(() => onStatus('reconnecting'));
-  connection.onreconnected(() => { onStatus('live'); onConnected(); });
-  connection.onclose(() => { onStatus('offline'); start(); });
+  // Every connection change is logged: a wall that stops updating is usually a dropped hub.
+  const status = value => {
+    console.log(`[${tag}] SignalR: ${value}${connection.connectionId ? ` (id ${connection.connectionId})` : ''}`);
+    onStatus(value);
+  };
+
+  connection.onreconnecting(error => { console.warn(`[${tag}] SignalR connection lost, reconnecting…`, error ?? ''); status('reconnecting'); });
+  connection.onreconnected(() => { status('live'); onConnected(); });
+  connection.onclose(error => { console.warn(`[${tag}] SignalR closed`, error ?? ''); status('offline'); start(); });
 
   async function start() {
-    onStatus('connecting');
+    status('connecting');
     for (let delay = 1000; ; delay = Math.min(delay * 2, 15000)) {
       try {
         await connection.start();
-        onStatus('live');
+        status('live');
         onConnected();
         return;
-      } catch {
-        onStatus('offline');
+      } catch (error) {
+        console.warn(`[${tag}] SignalR connect failed, retrying in ${delay / 1000}s`, error);
+        status('offline');
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }

@@ -75,7 +75,7 @@ for d in districts:
         field = PARTIES[:] + (["স্বতন্ত্র"] if rng.random() < 0.3 else [])
         cand_ids = []
         for party in field:
-            c.execute("INSERT INTO Candidates (Name, PartyName, Symbol) VALUES (?,?,?)", (name(), party, SYMBOLS[party]))
+            c.execute("INSERT INTO Candidates (Name, PartyName, Symbol, ConstituencyId) VALUES (?,?,?,?)", (name(), party, SYMBOLS[party], seat_id))
             cand_ids.append((c.lastrowid, party))
 
         if rng.random() > args.declared:
@@ -109,6 +109,22 @@ for minute in range(2, 90, 2):
               (match_id, players[0], kind, round(x, 1), round(y, 1), end[0] and round(end[0], 1), end[1] and round(end[1], 1), minute))
 c.execute("INSERT INTO MatchEvents (MatchId, PlayerId, EventType, CoordinateX, CoordinateY, Minute) VALUES (?,?,?,?,?,?)",
           (match_id, players[0], "Goal", 91.0, 49.0, 77))
+
+# Cricket and kabaddi demo matches, so every surface can be rehearsed.
+for title, sport, team_a, team_b, player, role, kinds in [
+    ("ডেমো টি-টোয়েন্টি · সেমিফাইনাল", "Cricket", "রাজশাহী রয়্যালস", "সিলেট স্ট্রাইকার্স", "নাসির হোসেন", "ব্যাটার",
+     ["Four", "Four", "Six", "Delivery", "Catch"]),
+    ("ডেমো কাবাডি লিগ", "Kabaddi", "বরিশাল বুলস", "খুলনা টাইগার্স", "আরিফ রাব্বানী", "রেইডার",
+     ["Raid", "Raid", "Bonus", "Tackle", "AllOut"]),
+]:
+    c.execute("INSERT INTO Matches (Title, Sport, MatchDate, TeamA, TeamB) VALUES (?,?,?,?,?)",
+              (title, sport, "2026-09-25 18:00:00", team_a, team_b))
+    extra_match = c.lastrowid
+    c.execute("INSERT INTO Players (Name, Team, Role) VALUES (?,?,?)", (player, team_a, role))
+    extra_player = c.lastrowid
+    for minute in range(1, 40, 2):
+        c.execute("INSERT INTO MatchEvents (MatchId, PlayerId, EventType, CoordinateX, CoordinateY, Minute) VALUES (?,?,?,?,?,?)",
+                  (extra_match, extra_player, rng.choice(kinds), round(rng.uniform(8, 92), 1), round(rng.uniform(12, 88), 1), minute))
 
 # ---------- war (fictional forces over real geography, clearly marked demo) ----------
 war = [
@@ -148,4 +164,5 @@ for sector, allocation, projects in sectors:
 
 con.commit()
 con.close()
-print(f"Demo data seeded: {seat_count} seats in {len(districts)} districts, 1 match, {len(war)} conflict zones, {len(sectors)} budget sectors.")
+print(f"Demo data seeded: {seat_count} seats in {len(districts)} districts, 3 matches (football, cricket, kabaddi), "
+      f"{len(war)} conflict zones, {len(sectors)} budget sectors.")

@@ -51,7 +51,13 @@ export function createSportsView() {
   }
 
   async function onData(keys) {
-    if (keys.has('*') || keys.has(`${state.matchId}:${state.playerId}`)) await load(false);
+    const onAir = `${state.matchId}:${state.playerId}`;
+    if (keys.has('*') || keys.has(onAir)) {
+      await load(false);
+      return;
+    }
+    // Only the match + player on air is drawn; edits to anyone else show once they go on air.
+    console.log(`[wall] Sports: change was for match:player ${[...keys].join(', ')}, but ${onAir} is on air — nothing to redraw`);
   }
 
   function unmount() {
@@ -155,7 +161,7 @@ export function createSportsView() {
 
     side.replaceChildren(
       el('div', { class: 'player-card' },
-        el('p', { class: 'eyebrow' }, data.matchTitle),
+        el('p', { class: 'eyebrow' }, `${tx.sports[data.sport] ?? data.sport} · ${data.matchTitle}`),
         el('h2', { class: 'panel-title' }, data.playerName),
         el('p', { class: 'muted' }, data.team)),
       el('div', { class: 'hero' },

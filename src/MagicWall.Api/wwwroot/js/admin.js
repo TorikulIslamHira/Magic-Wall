@@ -1,47 +1,22 @@
-// Admin dashboard: puts modules on air, focuses the wall, and enters live data.
-// Every write goes through the REST API; the server broadcasts to all walls and
-// other admin screens over SignalR, so several producers stay in sync.
-import { adminKey, connectHub, getJson, sendJson } from './api.js';
+// Admin dashboard ("control room"). Staff log in; what they see follows their capabilities:
+//  - Field reporters: a phone-friendly submission form only.
+//  - Desk reporters: the election approval queue + election / war / budget editors.
+//  - Sports desk: the sports feed queue + the sports editor.
+//  - Admin: everything, plus user management.
+// Every write goes through the REST API; the server broadcasts to all walls and other admin
+// screens over SignalR, so several producers stay in sync.
+import { UNAUTHORIZED_EVENT, connectHub, getJson, sendJson } from './api.js';
+import { $, attempt, fillSelect, toast } from './admin-ui.js';
 import { el, setChildren } from './dom.js';
+import { createFieldForm } from './field.js';
 import { date, num, t } from './i18n.js';
-import { EVENT_COLORS, EVENT_TYPES, drawArrow, drawSurface, fitCanvas, fromPx, surfaceRect, toPx } from './pitch.js';
+import { EVENT_COLORS, EVENT_TYPES, SPORTS, drawArrow, drawSurface, fitCanvas, fromPx, surfaceRect, toPx } from './pitch.js';
+import { createElectionQueue, createSportsQueue } from './review.js';
+import { createSettingsPanel } from './users.js';
 
-const $ = selector => document.querySelector(selector);
 const A = t.admin;
 
 let wallState = null;
-
-// ---------- shared helpers ----------
-
-let toastTimer = 0;
-function toast(message, kind = 'ok') {
-  const node = $('#toast');
-  node.textContent = message;
-  node.dataset.kind = kind;
-  node.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { node.hidden = true; }, kind === 'error' ? 6000 : 2500);
-}
-
-/** Runs an action, reporting failure as a toast instead of an unhandled rejection. */
-async function attempt(action, successMessage) {
-  try {
-    const result = await action();
-    if (successMessage) toast(successMessage);
-    return result;
-  } catch (error) {
-    toast(error.message, 'error');
-    return undefined;
-  }
-}
-
-function fillSelect(select, items, { value, label, placeholder }) {
-  const previous = select.value;
-  setChildren(select,
-    placeholder ? el('option', { value: '' }, placeholder) : null,
-    items.map(item => el('option', { value: String(value(item)) }, label(item))));
-  if ([...select.options].some(o => o.value === previous)) select.value = previous;
-}
 
 // ---------- wall state ----------
 
@@ -69,7 +44,14 @@ for (const button of document.querySelectorAll('[data-module]')) {
 
 // ---------- tabs ----------
 
+// Tabs the signed-in user may open (the rest are hidden by applyCapabilities).
+const allowedTab = name => {
+  const tab = document.querySelector(`[data-tab="${name}"]`);
+  return tab && !tab.hidden;
+};
+
 function showTab(name) {
+  if (!allowedTab(name)) name = document.querySelector('[data-tab]:not([hidden])')?.dataset.tab;
   for (const tab of document.querySelectorAll('[data-tab]')) tab.setAttribute('aria-selected', String(tab.dataset.tab === name));
   for (const panel of document.querySelectorAll('[data-panel]')) panel.hidden = panel.dataset.panel !== name;
   if (name === 'Sports') sports.resizePitch();
@@ -94,6 +76,12 @@ const election = {
     this.candidates = candidates ?? [];
     fillSelect($('#el-constituency'), constituencies ?? [], {
       value: c => c.svgPathId,
+      label: c => c.name,
+      placeholder: A.election.chooseSeat
+    });
+    // New candidates are nominated in a seat, so field reporters find them before any votes exist.
+    fillSelect($('#el-new-candidate-seat'), constituencies ?? [], {
+      value: c => c.id,
       label: c => c.name,
       placeholder: A.election.chooseSeat
     });
@@ -134,7 +122,8 @@ const election = {
     const created = await attempt(() => sendJson('POST', '/api/election/candidates', {
       name: $('#el-new-candidate-name').value.trim(),
       partyName: $('#el-new-candidate-party').value.trim(),
-      symbol: $('#el-new-candidate-symbol').value.trim()
+      symbol: $('#el-new-candidate-symbol').value.trim(),
+      constituencyId: Number($('#el-new-candidate-seat').value) || null
     }), A.election.candidateAdded);
 
     if (created) {
@@ -240,6 +229,10 @@ const sports = {
   size: { w: 0, h: 0 },
   canvas: $('#sp-pitch'),
 
+  get sport() {
+    return $('#sp-sport').value || 'Football';
+  },
+
   get match() {
     return this.matches.find(m => String(m.id) === $('#sp-match').value) ?? null;
   },
@@ -250,12 +243,26 @@ const sports = {
 
   async init() {
     this.matches = (await getJson('/api/sports/matches')) ?? [];
-    fillSelect($('#sp-match'), this.matches, {
+    fillSelect($('#sp-sport'), SPORTS, { value: s => s, label: s => t.sports.sports[s] ?? s });
+    // Open on the sport of the newest match, so there is something to pick straight away.
+    if (!this.pitchBound && this.matches[0]) $('#sp-sport').value = this.matches[0].sport;
+    if (!this.pitchBound) {
+      this.bindPitch();
+      this.pitchBound = true;
+    }
+    await this.onSportChange();
+  },
+
+  /** Sport drives everything below it: the match list, the field graphic and the event types. */
+  async onSportChange() {
+    const matches = this.matches.filter(m => m.sport === this.sport);
+    fillSelect($('#sp-match'), matches, {
       value: m => m.id,
       label: m => `${m.title} (${m.teamA} ${A.sports.versus} ${m.teamB})`,
-      placeholder: A.sports.chooseMatch
+      placeholder: matches.length ? A.sports.chooseMatch : A.sports.noMatches
     });
-    this.bindPitch();
+    fillSelect($('#sp-type'), EVENT_TYPES[this.sport], { value: type => type, label: type => t.sports.events[type] ?? type });
+    this.clearPosition();
     await this.onMatchChange();
   },
 
@@ -267,10 +274,79 @@ const sports = {
       label: p => `${p.name} (${p.team}${p.role ? `, ${p.role}` : ''})`,
       placeholder: A.sports.choosePlayer
     });
-    const types = EVENT_TYPES[match?.sport ?? 'Football'];
-    fillSelect($('#sp-type'), types, { value: type => type, label: type => t.sports.events[type] ?? type });
+    fillSelect($('#sp-new-player-team'), match ? [match.teamA, match.teamB] : [], {
+      value: team => team,
+      label: team => team,
+      placeholder: match ? null : A.sports.pickMatchFirst
+    });
+    this.renderFeed();
     this.draw();
     await this.loadEvents();
+  },
+
+  /** Live feed link for the chosen match: linked matches are polled and their events queued for review. */
+  renderFeed() {
+    const match = this.match;
+    const row = $('#sp-feed-status').closest('.feed-row');
+    row.hidden = !match;
+    if (!match) return;
+    const linked = Boolean(match.feedMatchId);
+    $('#sp-feed-status').textContent = linked ? A.feed.linked(match.feedMatchId) : A.feed.unlinked;
+    $('#sp-feed-status').classList.toggle('is-on', linked);
+    $('#sp-feed-id').hidden = linked;
+    if (!linked && !$('#sp-feed-id').value) $('#sp-feed-id').value = `live-${match.id}`;
+    $('#sp-feed-toggle').textContent = linked ? 'লাইভ ফিড বন্ধ' : 'লাইভ ফিড চালু';
+  },
+
+  async toggleFeed() {
+    const match = this.match;
+    if (!match) return;
+    const linking = !match.feedMatchId;
+    const feedMatchId = linking ? ($('#sp-feed-id').value.trim() || `live-${match.id}`) : null;
+    const ok = await attempt(async () => {
+      await sendJson('PUT', `/api/sports/matches/${match.id}/feed`, { feedMatchId });
+      return true;
+    }, linking ? A.feed.linkedToast : A.feed.unlinkedToast);
+    if (ok) {
+      match.feedMatchId = feedMatchId;
+      $('#sp-feed-id').value = '';
+      this.renderFeed();
+    }
+  },
+
+  async createMatch() {
+    const created = await attempt(() => sendJson('POST', '/api/sports/matches', {
+      title: $('#sp-new-match-title').value.trim(),
+      sport: this.sport,
+      matchDate: $('#sp-new-match-date').value,
+      teamA: $('#sp-new-match-team-a').value.trim(),
+      teamB: $('#sp-new-match-team-b').value.trim()
+    }), A.sports.matchAdded);
+
+    if (created) {
+      for (const id of ['#sp-new-match-title', '#sp-new-match-team-a', '#sp-new-match-team-b']) $(id).value = '';
+      this.matches = (await getJson('/api/sports/matches')) ?? [];
+      await this.onSportChange();
+      $('#sp-match').value = String(created.id);
+      await this.onMatchChange();
+    }
+  },
+
+  async createPlayer() {
+    if (!this.match) return toast(A.sports.pickMatchFirst, 'error');
+    const created = await attempt(() => sendJson('POST', '/api/sports/players', {
+      name: $('#sp-new-player-name').value.trim(),
+      team: $('#sp-new-player-team').value,
+      role: $('#sp-new-player-role').value.trim()
+    }), A.sports.playerAdded);
+
+    if (created) {
+      $('#sp-new-player-name').value = '';
+      $('#sp-new-player-role').value = '';
+      await this.onMatchChange();
+      $('#sp-player').value = String(created.id);
+      await this.loadEvents();
+    }
   },
 
   async loadEvents() {
@@ -384,7 +460,7 @@ const sports = {
     const { w, h } = this.size;
     if (!w || !h) return;
     const ctx = this.canvas.getContext('2d');
-    this.rect = surfaceRect(w, h, this.match?.sport ?? 'Football', 12);
+    this.rect = surfaceRect(w, h, this.sport, 12);
     ctx.clearRect(0, 0, w, h);
     drawSurface(ctx, this.rect);
 
@@ -419,7 +495,17 @@ function dot(ctx, p, radius, fill, stroke) {
   }
 }
 
+$('#sp-sport').addEventListener('change', () => attempt(() => sports.onSportChange()));
 $('#sp-match').addEventListener('change', () => attempt(() => sports.onMatchChange()));
+$('#sp-new-match-date').value = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+$('#sp-new-match').addEventListener('submit', event => {
+  event.preventDefault();
+  sports.createMatch();
+});
+$('#sp-new-player').addEventListener('submit', event => {
+  event.preventDefault();
+  sports.createPlayer();
+});
 $('#sp-player').addEventListener('change', () => attempt(() => sports.loadEvents()));
 $('#sp-type').addEventListener('change', () => sports.draw());
 $('#sp-clear').addEventListener('click', () => sports.clearPosition());
@@ -723,20 +809,75 @@ $('#budget-project-form').addEventListener('submit', event => {
   budget.addProject();
 });
 
-// ---------- admin key ----------
+$('#sp-feed-toggle').addEventListener('click', () => sports.toggleFeed());
 
-const keyInput = $('#admin-key');
-function renderKeyStatus() {
-  const hasKey = Boolean(adminKey.get());
-  keyInput.closest('.key-field').classList.toggle('missing', !hasKey);
-  $('#key-status').textContent = hasKey ? A.key.saved : A.key.missing;
+// ---------- sign-in & capabilities ----------
+
+let me = null;
+let electionQueue = null;
+let sportsQueue = null;
+let fieldForm = null;
+
+/**
+ * Shows only what this user may do. Every [data-cap] element needs that capability;
+ * "FieldOnly" = may submit election figures but not review them (the field reporter's view).
+ */
+function applyCapabilities(user) {
+  const caps = new Set(user.capabilities);
+  if (caps.has('SubmitElection') && !caps.has('ReviewElection')) caps.add('FieldOnly');
+  for (const node of document.querySelectorAll('[data-cap]')) node.hidden = !caps.has(node.dataset.cap);
+  document.body.classList.toggle('no-sidebar', !caps.has('ControlWall'));
+  document.body.classList.toggle('field-mode', caps.has('FieldOnly'));
+  $('#user-name').textContent = user.displayName;
+  $('#user-role').textContent = A.roles[user.role] ?? user.role;
+  return caps;
 }
-keyInput.value = adminKey.get();
-keyInput.addEventListener('input', () => {
-  adminKey.set(keyInput.value.trim());
-  renderKeyStatus();
+
+function showLogin(message) {
+  $('#app').hidden = true;
+  $('#login-screen').hidden = false;
+  $('#login-error').textContent = message ?? '';
+  $('#login-error').hidden = !message;
+  $(($('#login-user').value ? '#login-password' : '#login-user')).focus();
+}
+
+$('#login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = $('#login-submit');
+  button.disabled = true;
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userName: $('#login-user').value.trim(), password: $('#login-password').value })
+    });
+    if (!res.ok) {
+      showLogin(res.status === 429 ? A.login.tooMany : A.login.failed);
+      return;
+    }
+    const user = await res.json();
+    $('#login-password').value = '';
+    if (me && me.userName !== user.userName) {
+      location.reload();   // someone else signed in: start clean, with none of the previous user's data
+    } else if (me) {
+      $('#login-screen').hidden = true;   // same user after an expired session: carry on
+      $('#app').hidden = false;
+    } else {
+      await startApp(user);
+    }
+  } catch {
+    showLogin(A.login.offline);
+  } finally {
+    button.disabled = false;
+  }
 });
-renderKeyStatus();
+
+$('#logout').addEventListener('click', async () => {
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  location.reload();   // nothing of this user's session stays in memory
+});
+
+window.addEventListener(UNAUTHORIZED_EVENT, () => showLogin(A.login.expired));
 
 // ---------- live wall preview ----------
 
@@ -750,6 +891,8 @@ new ResizeObserver(() => {
 // ---------- live sync ----------
 
 function onDataChanged({ module, key }) {
+  // Seeing this right after a save proves the server saved it AND broadcast it to every screen.
+  console.log(`[admin] server broadcast DataChanged: ${module} / ${key}`);
   // Another producer edited what this screen is showing: refresh it.
   if (module === 'Election' && election.current?.svgPathId === key) attempt(() => election.load(key));
   if (module === 'Sports' && key === `${sports.match?.id}:${sports.playerId}`) attempt(() => sports.loadEvents());
@@ -759,15 +902,33 @@ function onDataChanged({ module, key }) {
 
 const STATUS_LABELS = A.status;
 
-connectHub({
-  on: { StateChanged: setWallState, DataChanged: onDataChanged },
-  onStatus: status => {
-    const node = $('#hub-status');
-    node.dataset.status = status;
-    node.textContent = STATUS_LABELS[status] ?? status;
-  },
-  onConnected: () => attempt(async () => setWallState(await getJson('/api/wall/state')))
-});
+function startHub() {
+  connectHub({
+    tag: 'admin',
+    on: {
+      StateChanged: state => {
+        console.log(`[admin] server broadcast StateChanged: ${state.activeModule}`, state);
+        setWallState(state);
+      },
+      DataChanged: onDataChanged,
+      // A submission arrived, the feed queued events, or someone approved/rejected: refresh queues live.
+      QueueChanged: ({ module, pending }) => {
+        console.log(`[admin] server broadcast QueueChanged: ${module} (${pending} pending)`);
+        if (module === 'Election') {
+          electionQueue?.refresh();
+          fieldForm?.refreshMine();
+        }
+        if (module === 'Sports') sportsQueue?.refresh();
+      }
+    },
+    onStatus: status => {
+      const node = $('#hub-status');
+      node.dataset.status = status;
+      node.textContent = STATUS_LABELS[status] ?? status;
+    },
+    onConnected: () => attempt(async () => setWallState(await getJson('/api/wall/state')))
+  });
+}
 
 // ---------- start ----------
 
@@ -781,9 +942,11 @@ async function focusEditorsOn(state) {
     await election.load(state.svgPathId);
   }
 
-  const match = $('#sp-match');
-  if (state.matchId && hasOption(match, String(state.matchId))) {
-    match.value = String(state.matchId);
+  const liveMatch = sports.matches.find(m => m.id === state.matchId);
+  if (liveMatch) {
+    $('#sp-sport').value = liveMatch.sport;
+    await sports.onSportChange();
+    $('#sp-match').value = String(liveMatch.id);
     await sports.onMatchChange();
     const player = $('#sp-player');
     if (state.playerId && hasOption(player, String(state.playerId))) {
@@ -806,13 +969,58 @@ async function focusEditorsOn(state) {
   }
 }
 
-const initial = await attempt(() => getJson('/api/wall/state'));
-if (initial) setWallState(initial);
-showTab(initial?.activeModule ?? 'Election');
-await Promise.all([
-  attempt(() => election.init()),
-  attempt(() => sports.init()),
-  attempt(() => war.init()),
-  attempt(() => budget.init())
-]);
-if (initial) await attempt(() => focusEditorsOn(initial));
+async function startApp(user) {
+  me = user;
+  const caps = applyCapabilities(user);
+  $('#login-screen').hidden = true;
+  $('#app').hidden = false;
+  console.log(`[admin] signed in as ${user.userName} (${user.role}); capabilities: ${user.capabilities.join(', ')}`);
+
+  const setBadge = (selector, n) => {
+    const badge = $(selector);
+    badge.textContent = num(n);
+    badge.hidden = n === 0;
+  };
+
+  // Load only what this user can use.
+  const jobs = [];
+  if (caps.has('FieldOnly')) {
+    fieldForm = createFieldForm();
+    jobs.push(attempt(() => fieldForm.init()));
+  }
+  if (caps.has('ReviewElection')) {
+    electionQueue = createElectionQueue(me, { onCount: n => setBadge('#badge-election', n) });
+    jobs.push(attempt(() => electionQueue.refresh()));
+  }
+  if (caps.has('ManageSports')) {
+    sportsQueue = createSportsQueue({ onCount: n => setBadge('#badge-sports', n) });
+    jobs.push(attempt(() => sportsQueue.refresh()), attempt(() => sports.init()));
+  }
+  if (caps.has('EditDesk')) {
+    jobs.push(attempt(() => election.init()), attempt(() => war.init()), attempt(() => budget.init()));
+  }
+  if (caps.has('ManageUsers')) {
+    const settings = createSettingsPanel(me);
+    jobs.push(attempt(() => settings.init()));
+  }
+
+  const initial = await attempt(() => getJson('/api/wall/state'));
+  if (initial) setWallState(initial);
+  // Open where this person's work is: the form, the review queue, or the module on air.
+  showTab(caps.has('FieldOnly') ? 'Submit'
+    : caps.has('ReviewElection') ? 'ElectionQueue'
+    : caps.has('ManageSports') ? 'SportsQueue'
+    : initial?.activeModule);
+
+  await Promise.all(jobs);
+  if (initial && caps.has('ControlWall')) await attempt(() => focusEditorsOn(initial));
+  // The live preview is a whole second wall: only load it for people who see the sidebar.
+  if (caps.has('ControlWall')) previewFrame.src = previewFrame.dataset.src;
+  startHub();
+}
+
+// ---------- boot: signed in already (cookie), or show the login screen ----------
+
+const current = await fetch('/api/auth/me').then(r => (r.ok ? r.json() : null)).catch(() => null);
+if (current) await startApp(current);
+else showLogin();

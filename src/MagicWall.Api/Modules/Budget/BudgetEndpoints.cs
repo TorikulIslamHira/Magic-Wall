@@ -1,3 +1,4 @@
+using MagicWall.Api.Auth;
 using MagicWall.Api.Data;
 using MagicWall.Api.Hubs;
 using MagicWall.Api.Wall;
@@ -41,11 +42,11 @@ public static class BudgetEndpoints
         group.MapGet("/sectors", GetSectors);
         group.MapGet("/fiscal-years", GetFiscalYears);
 
-        group.MapPost("/sectors", CreateSector).RequireAdminKey();
-        group.MapPut("/sectors/{id:int}", UpdateSector).RequireAdminKey();
-        group.MapPost("/projects", CreateProject).RequireAdminKey();
-        group.MapPut("/projects/{id:int}", UpdateProject).RequireAdminKey();
-        group.MapDelete("/projects/{id:int}", DeleteProject).RequireAdminKey();
+        group.MapPost("/sectors", CreateSector).RequireAuthorization(Policies.EditDesk);
+        group.MapPut("/sectors/{id:int}", UpdateSector).RequireAuthorization(Policies.EditDesk);
+        group.MapPost("/projects", CreateProject).RequireAuthorization(Policies.EditDesk);
+        group.MapPut("/projects/{id:int}", UpdateProject).RequireAuthorization(Policies.EditDesk);
+        group.MapDelete("/projects/{id:int}", DeleteProject).RequireAuthorization(Policies.EditDesk);
 
         return app;
     }

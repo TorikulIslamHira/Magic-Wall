@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ম্যাজিক ওয়াল · ইন্টারঅ্যাক্টিভ হাব</title>
+  <link rel="preload" href="fonts/hind-siliguri/hind-siliguri-bengali-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/fonts.css">
+  <link rel="stylesheet" href="css/wall.css">
+</head>
+<body class="hub-page">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">ম্যাজিক ওয়াল</span>
+      <button id="hub-back" class="hub-back" type="button" hidden aria-label="প্রধান মেনুতে ফিরুন">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>
+        <span>মেনু</span>
+      </button>
+    </div>
+    <div class="title-block">
+      <span id="module-eyebrow" class="title-eyebrow">ইন্টারঅ্যাক্টিভ হাব</span>
+      <h1 id="module-title">প্রধান মেনু</h1>
+    </div>
+    <div class="status">
+      <span id="hub-status" class="live-badge" data-status="connecting"><span class="dot"></span><span class="label">সংযোগ হচ্ছে…</span></span>
+      <div class="clock">
+        <time id="clock"></time>
+        <span id="today"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main menu: one tile per module. Stats are filled from public (approved-only) endpoints. -->
+  <main id="hub-menu" class="hub-menu">
+    <p class="hub-greeting">বিষয় বেছে নিন</p>
+    <div class="hub-tiles">
+      <button type="button" class="hub-tile" data-module="Election" style="--tile: #3987e5">
+        <svg class="hub-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M10 22h28v18H10z"/><path d="M16 22V10h16v12"/><path d="M20 16l3 3 6-6"/></svg>
+        <span class="hub-tile-title">নির্বাচন</span>
+        <span class="hub-tile-sub">জাতীয় সংসদ নির্বাচনের ফলাফল</span>
+        <span class="hub-tile-stat" data-stat="Election">…</span>
+      </button>
+      <button type="button" class="hub-tile" data-module="Sports" style="--tile: #199e70">
+        <svg class="hub-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="16"/><path d="M24 16l7 5-3 8h-8l-3-8z"/><path d="M24 8v8M40 21l-9 0M34 38l-6-9M14 38l6-9M8 21h9"/></svg>
+        <span class="hub-tile-title">খেলা</span>
+        <span class="hub-tile-sub">ম্যাচ বিশ্লেষণ ও হিটম্যাপ</span>
+        <span class="hub-tile-stat" data-stat="Sports">…</span>
+      </button>
+      <button type="button" class="hub-tile" data-module="War" style="--tile: #e66767">
+        <svg class="hub-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="16"/><path d="M8 24h32M24 8c5 5 7 10 7 16s-2 11-7 16c-5-5-7-10-7-16s2-11 7-16z"/></svg>
+        <span class="hub-tile-title">সংঘাত</span>
+        <span class="hub-tile-sub">যুদ্ধ ও ভূরাজনীতির সময়রেখা</span>
+        <span class="hub-tile-stat" data-stat="War">…</span>
+      </button>
+      <button type="button" class="hub-tile" data-module="Budget" style="--tile: #c98500">
+        <svg class="hub-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="16"/><path d="M24 8v16l12 8"/></svg>
+        <span class="hub-tile-title">বাজেট</span>
+        <span class="hub-tile-sub">খাতভিত্তিক বরাদ্দ ও মেগা প্রকল্প</span>
+        <span class="hub-tile-stat" data-stat="Budget">…</span>
+      </button>
+    </div>
+  </main>
+
+  <!-- Sports needs a match and player before the pitch can be drawn. -->
+  <section id="hub-picker" class="hub-picker" hidden></section>
+
+  <main id="stage" class="stage" hidden></main>
+
+  <button id="fullscreen-toggle" class="fullscreen-toggle" type="button" aria-pressed="false" aria-label="পূর্ণ পর্দা">
+    <svg class="icon-enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+    <svg class="icon-exit" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg>
+  </button>
+
+  <!-- Vendored libraries (see lib/README.md); no CDN, so the hub works on an air-gapped network. -->
+  <script src="lib/signalr/signalr.min.js"></script>
+  <script src="lib/d3/d3.min.js"></script>
+  <script type="module" src="js/hub.js"></script>
+</body>
+</html>

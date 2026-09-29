@@ -64,7 +64,11 @@ export function createBudgetView() {
   }
 
   async function onData(keys) {
-    if (keys.has('*') || keys.has(fiscalYear) || !fiscalYear) await load();
+    if (keys.has('*') || keys.has(fiscalYear) || !fiscalYear) {
+      await load();
+      return;
+    }
+    console.log(`[wall] Budget: change was for fiscal year ${[...keys].join(', ')}, but ${fiscalYear} is on air — nothing to redraw`);
   }
 
   function unmount() {

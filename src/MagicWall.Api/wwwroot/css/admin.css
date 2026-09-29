@@ -107,15 +107,27 @@ h1, h2, h3 { margin: 0; }
 
 .conn-pill[data-status="offline"]::before { color: var(--live); }
 
-.key-field { display: grid; grid-template-columns: auto 16rem; align-items: center; column-gap: 0.6rem; }
+/* Signed-in user: who you are and which role the menus follow. */
+.user-chip { display: flex; align-items: center; gap: 0.7rem; }
 
-.key-label { color: var(--muted); font-size: 0.85rem; }
+.user-avatar {
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 38%, var(--muted) 0 22%, transparent 23%),
+    radial-gradient(circle at 50% 100%, var(--muted) 0 40%, transparent 41%),
+    var(--surface-2);
+  border: 1px solid var(--line-strong);
+}
 
-.key-field small { grid-column: 2; font-size: 0.75rem; color: var(--good); }
+.user-text { display: grid; line-height: 1.15; }
 
-.key-field.missing input { border-color: var(--warn); }
+.user-text strong { font-size: 0.95rem; }
 
-.key-field.missing small { color: var(--warn); }
+.user-text span { color: var(--muted); font-size: 0.78rem; }
+
+.user-chip button { min-height: 2.1rem; padding: 0.3rem 0.9rem; }
 
 /* ---------- layout ---------- */
 .layout {
@@ -384,6 +396,12 @@ table.data button:not(.danger):hover { background: rgba(56, 189, 248, 0.12); fil
 
 .toast[data-kind="error"] { background: #3b0a0a; border-color: var(--live); }
 
+.toast { display: flex; align-items: flex-start; gap: 0.75rem; }
+
+.toast-text { flex: 1; }
+
+.toast-close { min-height: 0; padding: 0 0.35rem; border: none; background: transparent; color: inherit; font-size: 1rem; line-height: 1.4; }
+
 /* ---------- narrow screens (a producer's laptop or tablet) ---------- */
 @media (max-width: 1100px) {
   .layout { grid-template-columns: 1fr; }
@@ -395,8 +413,483 @@ table.data button:not(.danger):hover { background: rgba(56, 189, 248, 0.12); fil
 @media (max-width: 720px) {
   .sidebar { grid-template-columns: 1fr; }
   .sports-editor, .form-grid, .form-grid.three, .form-grid.four { grid-template-columns: 1fr; }
-  .key-field { grid-template-columns: 1fr; }
-  .key-field small { grid-column: 1; }
+}
+
+/* ---------- login ---------- */
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem 1rem;
+  background:
+    radial-gradient(700px 420px at 50% 0%, rgba(56, 189, 248, 0.12), transparent 65%),
+    radial-gradient(600px 400px at 100% 100%, rgba(99, 102, 241, 0.1), transparent 60%),
+    var(--bg);
+}
+
+.login-card {
+  width: min(100%, 25rem);
+  display: grid;
+  gap: 1rem;
+  padding: 2rem 1.75rem 1.5rem;
+  border-radius: 18px;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+}
+
+.login-brand { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+
+.login-brand div { display: grid; line-height: 1.15; }
+
+.login-brand strong { font-size: 1.2rem; }
+
+.login-brand div span { color: var(--muted); font-size: 0.85rem; }
+
+.login-card h1 { font-size: 1.5rem; }
+
+.login-card > .muted { margin: -0.5rem 0 0.25rem; font-size: 0.87rem; }
+
+.login-card input { min-height: 2.9rem; font-size: 1rem; }
+
+.login-card button[type="submit"] { min-height: 3rem; font-size: 1.05rem; }
+
+.login-error {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  font-size: 0.9rem;
+}
+
+.login-card > .login-foot { margin: 0.25rem 0 0; text-align: center; font-size: 0.8rem; }
+
+.muted { color: var(--muted); }
+
+.empty { margin: 0; padding: 1.25rem 0.5rem; color: var(--muted); text-align: center; list-style: none; }
+
+/* ---------- role layouts ---------- */
+/* No wall control (field reporter): no sidebar, content takes the full width. */
+body.no-sidebar .layout { grid-template-columns: minmax(0, 1fr); max-width: 1100px; }
+
+body.field-mode .layout { max-width: 40rem; }
+
+/* ---------- tab badges & counts ---------- */
+.tab-badge {
+  display: inline-block;
+  min-width: 1.35rem;
+  margin-left: 0.35rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--warn);
+  color: #1c1204;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.35rem;
+  text-align: center;
+}
+
+.count-pill {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.6rem;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 0.85rem;
+  vertical-align: middle;
+}
+
+/* ---------- status chips (each state also has a symbol, never color alone) ---------- */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-chip::before { font-size: 0.7rem; }
+
+.status-pending { color: var(--warn); }
+
+.status-pending::before { content: "◷"; }
+
+.status-approved { color: var(--good); }
+
+.status-approved::before { content: "✓"; }
+
+.status-rejected { color: #f87171; }
+
+.status-rejected::before { content: "✕"; }
+
+.status-superseded { color: var(--faint); }
+
+.status-superseded::before { content: "↷"; }
+
+/* ---------- election approval queue ---------- */
+.queue-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: 0.9rem; }
+
+.queue-list > .empty { grid-column: 1 / -1; }
+
+.queue-card {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  border-left: 4px solid var(--accent);
+  background: var(--field);
+}
+
+.queue-card.is-warning { border-left-color: var(--warn); }
+
+.queue-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; }
+
+.queue-card-head h3 { font-size: 1.05rem; }
+
+.queue-card-head p { margin: 0.15rem 0 0; font-size: 0.87rem; }
+
+.queue-when { color: var(--faint); font-size: 0.78rem; white-space: nowrap; }
+
+/* Old -> new is the decision: large, tabular, side by side. */
+.vote-change {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.vote-old { color: var(--muted); font-size: 1.1rem; }
+
+.vote-arrow { color: var(--faint); }
+
+.vote-new { font-size: 1.6rem; font-weight: 700; }
+
+.vote-delta { margin-left: auto; padding: 0.05rem 0.5rem; border-radius: 6px; font-size: 0.85rem; font-weight: 700; }
+
+.vote-delta.up { color: var(--good); background: rgba(34, 197, 94, 0.12); }
+
+.vote-delta.down { color: var(--warn); background: rgba(245, 158, 11, 0.14); }
+
+.queue-warning { margin: 0; color: var(--warn); font-size: 0.85rem; font-weight: 600; }
+
+.queue-note { margin: 0; padding-left: 0.6rem; border-left: 2px solid var(--line-strong); font-size: 0.9rem; font-style: italic; }
+
+.queue-meta { margin: 0; color: var(--muted); font-size: 0.8rem; }
+
+.queue-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+
+.queue-actions button:first-child, .bulk-bar #sq-approve { background: var(--good); border-color: var(--good); color: #03170b; }
+
+.reject-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.4rem; }
+
+.reason-input { min-height: 2.3rem; }
+
+/* ---------- recent decisions ---------- */
+.recent-list { display: grid; margin: 0; padding: 0; list-style: none; }
+
+.recent-row {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.25rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+.recent-row:first-child { border-top: none; }
+
+.recent-row .status-chip { justify-self: start; }
+
+.recent-text { display: grid; }
+
+.recent-text small { color: var(--muted); font-size: 0.78rem; }
+
+.recent-note { max-width: 20rem; color: var(--muted); font-size: 0.82rem; }
+
+/* A rejection reason matters to the reporter: red. An approval note is just context. */
+.status-rejected ~ .recent-note { color: #fca5a5; }
+
+/* ---------- sports approval queue ---------- */
+.queue-sports { display: grid; grid-template-columns: minmax(16rem, 1fr) minmax(0, 1.4fr); gap: 1.1rem; margin-top: 1rem; align-items: start; }
+
+.queue-sports .mini-pitch { cursor: default; }
+
+.bulk-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.6rem; }
+
+.check-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: var(--text); cursor: pointer; }
+
+.check-label input, table.data input[type="checkbox"] { width: 1.1rem; height: 1.1rem; min-height: 1.1rem; padding: 0; accent-color: var(--accent); }
+
+table.data tr.is-selected td { background: rgba(56, 189, 248, 0.08); }
+
+table.data td.center { text-align: center; }
+
+table.data tr.is-inactive td { opacity: 0.5; }
+
+/* ---------- sports feed link ---------- */
+.feed-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.9rem; }
+
+.feed-row input { flex: 1 1 12rem; max-width: 18rem; }
+
+.feed-status { padding: 0.25rem 0.7rem; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); font-size: 0.82rem; }
+
+.feed-status::before { content: "●"; margin-right: 0.4rem; color: var(--faint); }
+
+.feed-status.is-on { color: var(--text); border-color: rgba(34, 197, 94, 0.5); }
+
+.feed-status.is-on::before { color: var(--good); }
+
+/* ---------- field reporter form (phone first) ---------- */
+.field-stack .card { padding: 1.1rem 1rem 1.2rem; }
+
+.fd-form { display: grid; gap: 0.9rem; }
+
+.fd-form select, .fd-form input { min-height: 3rem; font-size: 1rem; }
+
+.fd-candidates { display: grid; gap: 0.6rem; }
+
+.fd-candidate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--field);
+}
+
+.fd-candidate-info { display: grid; gap: 0.1rem; min-width: 0; }
+
+.fd-candidate-info strong { font-size: 1rem; }
+
+.fd-candidate-info span { font-size: 0.82rem; }
+
+.fd-onair { color: var(--muted); }
+
+.fd-pending { color: var(--warn); }
+
+.fd-form .fd-votes { text-align: right; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+
+.fd-submit { min-height: 3.2rem; font-size: 1.1rem; }
+
+.fd-mine { display: grid; margin: 0; padding: 0; list-style: none; }
+
+.fd-mine-row { display: grid; gap: 0.3rem; padding: 0.7rem 0.1rem; border-top: 1px solid var(--line); }
+
+.fd-mine-row:first-child { border-top: none; }
+
+.fd-mine-main { display: flex; justify-content: space-between; gap: 0.75rem; }
+
+.fd-mine-main span { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.fd-mine-meta { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; }
+
+.fd-reason { margin: 0; padding: 0.4rem 0.6rem; border-radius: 7px; background: rgba(239, 68, 68, 0.1); color: #fca5a5; font-size: 0.85rem; }
+
+/* ---------- narrow screens: queues & field form ---------- */
+@media (max-width: 1100px) {
+  .queue-sports { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .layout { padding: 0.75rem 0.75rem 6rem; }
+  .topbar { gap: 0.75rem; padding: 0.6rem 0.9rem; }
+  .brand-text span, .user-avatar { display: none; }
+  .tabs { display: flex; max-width: 100%; overflow-x: auto; justify-self: stretch; }
+  .tabs button { padding: 0.55rem 0.9rem; }
+  .recent-row { grid-template-columns: auto minmax(0, 1fr); }
+  .recent-note { grid-column: 1 / -1; max-width: none; }
+  .reject-row { grid-template-columns: 1fr 1fr; }
+  .reject-row .reason-input { grid-column: 1 / -1; }
+  /* A field reporter has one tab (no tab bar needed); the submit button stays under the thumb. */
+  body.field-mode .tabs { display: none; }
+  body.field-mode .fd-submit {
+    position: sticky;
+    bottom: 0.75rem;
+    z-index: 5;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+  .fd-candidate { grid-template-columns: minmax(0, 1fr) 7rem; }
+  /* Toasts at the top on phones, clear of the sticky submit button. */
+  .toast { left: 0.75rem; right: 0.75rem; top: 0.75rem; bottom: auto; max-width: none; }
+}
+
+/* ---------- settings (admin) ---------- */
+.settings { --role-FieldReporter: #38bdf8; --role-DeskReporter: #a78bfa; --role-SportsDesk: #34d399; --role-Admin: #fbbf24; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Role overview: one card per role, clicking one filters the user list. */
+.role-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.8rem; }
+
+.role-card {
+  --role: var(--accent);
+  display: grid;
+  gap: 0.4rem;
+  align-content: start;
+  min-height: 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--role);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  color: var(--text);
+  text-align: left;
+  font-weight: 400;
+  white-space: normal;
+}
+
+.role-card:hover { filter: none; border-color: var(--line-strong); border-top-color: var(--role); }
+
+.role-card[aria-pressed="true"] { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--role); }
+
+.role-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+
+.role-card-head strong { font-size: 1.05rem; }
+
+.role-count { color: var(--role); font-weight: 700; }
+
+.role-card-summary { color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
+
+.role-card-caps { color: var(--faint); font-size: 0.78rem; }
+
+.role-FieldReporter { --role: var(--role-FieldReporter); }
+
+.role-DeskReporter { --role: var(--role-DeskReporter); }
+
+.role-SportsDesk { --role: var(--role-SportsDesk); }
+
+.role-Admin { --role: var(--role-Admin); }
+
+/* New user form + the live "what this role can do" checklist. */
+.add-user {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 1rem 1.5rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--field);
+}
+
+.add-user-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; align-content: start; }
+
+.add-user .button-row { grid-column: 1 / -1; }
+
+.add-user small { font-weight: 400; font-size: 0.75rem; }
+
+/* Fields keep their natural height even when a neighbour in the row has a hint line. */
+.add-user-fields label { align-content: start; }
+
+.password-field { display: flex; gap: 0.4rem; }
+
+.password-field input { flex: 1; min-width: 0; }
+
+.grants { padding: 0.8rem 0.9rem; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); }
+
+.grants-title { margin: 0; font-weight: 700; }
+
+.grants-summary { margin: 0.2rem 0 0.6rem; font-size: 0.82rem; }
+
+.grants-list { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+
+.grants-list li { display: grid; grid-template-columns: 1.2rem minmax(0, 1fr); gap: 0.4rem; font-size: 0.85rem; }
+
+.grants-list li > span:nth-child(2) { display: grid; }
+
+.grants-list small { color: var(--muted); font-size: 0.75rem; }
+
+.grants-list .is-granted .grant-mark { color: var(--good); font-weight: 700; }
+
+.grants-list .is-denied { opacity: 0.5; }
+
+.grants-list .is-denied .grant-mark { color: var(--faint); }
+
+/* User list */
+.user-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+
+.user-toolbar input[type="search"] { flex: 1 1 16rem; max-width: 24rem; }
+
+.user-toolbar select { flex: 0 1 12rem; width: auto; }
+
+.users-table td { vertical-align: top; }
+
+table.data.users-table input[type="text"] { width: 100%; min-width: 10rem; }
+
+.user-cell { display: grid; gap: 0.1rem; }
+
+.you-tag { margin-left: 0.4rem; padding: 0 0.45rem; border-radius: 999px; background: rgba(56, 189, 248, 0.15); color: var(--accent); font-size: 0.72rem; font-weight: 600; }
+
+.role-cell { min-width: 12rem; }
+
+.role-cell select { min-height: 2.2rem; }
+
+.role-diff { display: grid; gap: 0.15rem; margin-top: 0.4rem; padding: 0.45rem 0.6rem; border-radius: 7px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.35); font-size: 0.78rem; }
+
+.diff-gain { color: var(--good); }
+
+.diff-loss { color: #fca5a5; }
+
+.switch { display: inline-flex; flex-direction: row; align-items: center; gap: 0.45rem; color: var(--text); font-size: 0.85rem; cursor: pointer; }
+
+.switch input { width: 1.1rem; height: 1.1rem; min-height: 1.1rem; padding: 0; accent-color: var(--good); }
+
+.users-table .actions { display: inline-flex; gap: 0.4rem; }
+
+/* An unsaved change: Save lights up, so it's obvious something is waiting. */
+table.data button.primary:not(:disabled) { background: var(--accent); color: var(--accent-ink); }
+
+table.data button.primary:not(:disabled):hover { background: var(--accent); filter: brightness(1.08); }
+
+table.data.users-table td:last-child { white-space: nowrap; }
+
+table.data tr.reset-row td { background: var(--field); border-top: none; }
+
+.reset-form { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.5rem; }
+
+table.data .reset-form input[type="text"] { width: 16rem; min-width: 0; text-align: left; font-family: ui-monospace, Consolas, monospace; }
+
+/* Role & permission matrix */
+.matrix th.role-col { border-bottom: 3px solid var(--role); color: var(--text); }
+
+.matrix .cap-cell { display: grid; gap: 0.1rem; }
+
+.matrix .cap-cell small { color: var(--muted); font-size: 0.78rem; }
+
+table.data.matrix td.center { text-align: center; }
+
+.matrix-mark { font-size: 1.1rem; font-weight: 700; }
+
+.matrix .is-yes .matrix-mark { color: var(--good); }
+
+.matrix .is-no .matrix-mark { color: var(--faint); }
+
+.matrix-notes { margin: 0.9rem 0 0; padding-left: 1.2rem; color: var(--muted); font-size: 0.84rem; line-height: 1.6; }
+
+@media (max-width: 1100px) {
+  .add-user { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .add-user-fields { grid-template-columns: 1fr; }
+  .card-head { flex-wrap: wrap; }
 }
 
 @media (prefers-reduced-motion: reduce) {

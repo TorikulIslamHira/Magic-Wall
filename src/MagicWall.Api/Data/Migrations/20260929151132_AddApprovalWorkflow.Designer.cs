@@ -3,6 +3,7 @@ using System;
 using MagicWall.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace MagicWall.Api.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260929151132_AddApprovalWorkflow")]
+    partial class AddApprovalWorkflow
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
@@ -130,9 +133,6 @@ namespace MagicWall.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("ConstituencyId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -149,8 +149,6 @@ namespace MagicWall.Api.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ConstituencyId");
 
                     b.HasIndex("PartyName");
 
@@ -515,16 +513,6 @@ namespace MagicWall.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("BudgetSector");
-                });
-
-            modelBuilder.Entity("MagicWall.Api.Modules.Election.Candidate", b =>
-                {
-                    b.HasOne("MagicWall.Api.Modules.Election.Constituency", "Constituency")
-                        .WithMany()
-                        .HasForeignKey("ConstituencyId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Constituency");
                 });
 
             modelBuilder.Entity("MagicWall.Api.Modules.Election.ElectionResult", b =>
