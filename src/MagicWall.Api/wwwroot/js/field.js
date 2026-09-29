@@ -7,6 +7,29 @@ import { $, attempt, fillSelect, statusChip, toast } from './admin-ui.js';
 import { ago, num, t } from './i18n.js';
 
 const F = t.admin.field;
+const SUN_KEY = 'magicwall.sunlight';
+
+/**
+ * Sunlight mode: a light, maximum-contrast theme for reading the form outdoors.
+ * Remembered per device (a convenience only; the page works the same without storage).
+ */
+function initSunlightMode() {
+  const button = $('#fd-sun');
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  const apply = on => {
+    document.body.classList.toggle('sun', on);
+    button.setAttribute('aria-pressed', String(on));
+    themeColor?.setAttribute('content', on ? '#ffffff' : '#070d1a');
+  };
+  let saved = false;
+  try { saved = localStorage.getItem(SUN_KEY) === '1'; } catch { /* storage blocked: start dark */ }
+  apply(saved);
+  button.addEventListener('click', () => {
+    const on = !document.body.classList.contains('sun');
+    apply(on);
+    try { localStorage.setItem(SUN_KEY, on ? '1' : '0'); } catch { /* not remembered, still applied */ }
+  });
+}
 
 export function createFieldForm() {
   const districtSelect = $('#fd-district');
@@ -22,6 +45,7 @@ export function createFieldForm() {
   let inputs = new Map();   // candidateId -> <input>
 
   async function init() {
+    initSunlightMode();
     const [summaries, districts] = await Promise.all([
       getJson('/api/election/constituencies'),
       getJson('/maps/bd-districts.geojson')

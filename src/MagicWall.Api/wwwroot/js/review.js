@@ -131,6 +131,10 @@ export function createSportsQueue({ onCount }) {
           el('td', {}, e.playerName, el('small', { class: 'muted' }, ` · ${e.team}`)),
           el('td', {}, e.endX == null ? `${e.x}, ${e.y}` : `${e.x}, ${e.y} → ${e.endX}, ${e.endY}`),
           el('td', { class: 'muted' }, ago(e.submittedAt)));
+        // The whole row (a card on phones) toggles the selection: a far bigger target than the checkbox.
+        row.addEventListener('click', event => {
+          if (event.target !== box) box.click();
+        });
         row.addEventListener('mouseenter', () => { hovered = e.id; draw(); });
         row.addEventListener('mouseleave', () => { hovered = null; draw(); });
         return row;

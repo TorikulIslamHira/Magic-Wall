@@ -410,7 +410,7 @@ table.data button:not(.danger):hover { background: rgba(56, 189, 248, 0.12); fil
   .header-status { grid-row: 2; grid-column: 1 / -1; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .sidebar { grid-template-columns: 1fr; }
   .sports-editor, .form-grid, .form-grid.three, .form-grid.four { grid-template-columns: 1fr; }
 }
@@ -707,24 +707,14 @@ table.data tr.is-inactive td { opacity: 0.5; }
   .queue-sports { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .layout { padding: 0.75rem 0.75rem 6rem; }
   .topbar { gap: 0.75rem; padding: 0.6rem 0.9rem; }
   .brand-text span, .user-avatar { display: none; }
-  .tabs { display: flex; max-width: 100%; overflow-x: auto; justify-self: stretch; }
-  .tabs button { padding: 0.55rem 0.9rem; }
   .recent-row { grid-template-columns: auto minmax(0, 1fr); }
   .recent-note { grid-column: 1 / -1; max-width: none; }
   .reject-row { grid-template-columns: 1fr 1fr; }
   .reject-row .reason-input { grid-column: 1 / -1; }
-  /* A field reporter has one tab (no tab bar needed); the submit button stays under the thumb. */
-  body.field-mode .tabs { display: none; }
-  body.field-mode .fd-submit {
-    position: sticky;
-    bottom: 0.75rem;
-    z-index: 5;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  }
   .fd-candidate { grid-template-columns: minmax(0, 1fr) 7rem; }
   /* Toasts at the top on phones, clear of the sticky submit button. */
   .toast { left: 0.75rem; right: 0.75rem; top: 0.75rem; bottom: auto; max-width: none; }
@@ -887,11 +877,431 @@ table.data.matrix td.center { text-align: center; }
   .add-user { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .add-user-fields { grid-template-columns: 1fr; }
   .card-head { flex-wrap: wrap; }
 }
 
+/* =====================================================================
+   Phones & touch: bottom navigation, on-air drawer, cards instead of
+   tables, 44px touch targets, sunlight mode for field reporters.
+   ===================================================================== */
+
+/* Native form controls (select pop-ups, scrollbars) in the dark theme too. */
+:root { color-scheme: dark; }
+
+/* No double-tap zoom delay on anything tappable; no grey flash on tap. */
+a, button, input, select, textarea, label, summary, [role="tab"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Never scroll sideways: a stray wide element must not drag the whole page. */
+body { overflow-x: hidden; overflow-x: clip; }
+
+/* Desktop never shows the phone-only controls. */
+.nav-toggle, .drawer-head, .tab-icon, .tab-short, .nav-backdrop { display: none; }
+
+.sun-toggle { flex: none; }
+
+/* ---------- touch targets: phones, tablets, any coarse pointer ---------- */
+@media (max-width: 768px), (pointer: coarse) {
+  /* #app / #login-screen raise specificity above per-component sizes (e.g. table.data input). */
+  #app :is(button, select, textarea, input:not([type="checkbox"], [type="radio"])),
+  #login-screen :is(button, input) {
+    min-height: 44px;
+  }
+
+  #app button { min-width: 44px; }
+
+  /* Checkboxes stay native-sized; their label is the 44px target. */
+  #app :is(.check-label, .switch) { min-height: 44px; padding-right: 0.25rem; }
+
+  #app input[type="checkbox"] { width: 1.35rem; height: 1.35rem; min-height: 1.35rem; }
+
+  #app a.link { display: inline-flex; align-items: center; min-height: 44px; }
+
+  .toast-close { min-width: 44px; min-height: 44px; }
+
+  /* Pressed state: the feedback a native app gives under the thumb. */
+  #app button:active:not(:disabled) { transform: scale(0.97); }
+}
+
+/* ---------- phones ---------- */
+@media (max-width: 768px) {
+  /* 16px text in fields: iOS zooms the page into anything smaller when it gets focus. */
+  #app :is(input, select, textarea), #login-screen input { font-size: 16px; }
+
+  /* Header: [menu] brand … name + logout, then what's on air. */
+  .topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding: calc(0.5rem + env(safe-area-inset-top)) 0.75rem 0.5rem;
+  }
+
+  .brand { flex: 1; min-width: 0; }
+
+  .brand-mark { width: 1.8rem; height: 1.8rem; }
+
+  .brand-text strong { font-size: 1.05rem; white-space: nowrap; }
+
+  .user-chip { gap: 0.5rem; }
+
+  .user-text span, .user-avatar { display: none; }
+
+  .user-text strong { max-width: 8.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
+
+  .header-status { order: 3; width: 100%; gap: 0.5rem; }
+
+  .on-air-pill { padding: 0.25rem 0.75rem; font-size: 0.85rem; }
+
+  .conn-pill { font-size: 0.78rem; }
+
+  .nav-toggle {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .nav-toggle svg { width: 1.4rem; height: 1.4rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+
+  /* Room for the bottom bar (and the home indicator on notched phones). */
+  .layout { padding: 0.75rem 0.75rem calc(5.5rem + env(safe-area-inset-bottom)); gap: 0.9rem; }
+
+  .card, .panel { padding: 1rem 0.9rem 1.1rem; }
+
+  /* -- on-air controls: slide-in drawer -- */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    width: min(86vw, 22rem);
+    display: grid;
+    grid-template-columns: 1fr;
+    align-content: start;
+    gap: 1rem;
+    padding: calc(0.9rem + env(safe-area-inset-top)) 0.9rem calc(1rem + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--bg);
+    border-right: 1px solid var(--line-strong);
+    box-shadow: 24px 0 60px rgba(0, 0, 0, 0.55);
+    transform: translateX(-105%);
+    visibility: hidden;   /* closed drawer: out of the tab order and screen readers */
+    transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 260ms;
+  }
+
+  body.drawer-open .sidebar { transform: none; visibility: visible; transition-delay: 0s; }
+
+  body.drawer-open { overflow: hidden; }   /* the page behind doesn't scroll */
+
+  .nav-backdrop { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(2, 6, 18, 0.6); }
+
+  .drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+
+  .drawer-head strong { font-size: 1.05rem; }
+
+  .module-switch button { min-height: 3.4rem; }
+
+  /* -- tabs: bottom navigation bar -- */
+  .tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    display: flex;
+    justify-self: stretch;
+    gap: 0.15rem;
+    padding: 0.3rem 0.35rem calc(0.3rem + env(safe-area-inset-bottom));
+    border: none;
+    border-top: 1px solid var(--line-strong);
+    border-radius: 0;
+    background: rgba(10, 17, 32, 0.97);
+    backdrop-filter: blur(12px);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar { display: none; }
+
+  .tabs button {
+    flex: 1 0 4.3rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    min-height: 3.5rem;
+    padding: 0.3rem 0.2rem;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .tab-icon { display: block; width: 1.45rem; height: 1.45rem; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+  .tab-short { display: inline; }
+
+  .tabs button:has(.tab-short) .tab-label { display: none; }
+
+  .tabs button[aria-selected="true"] { background: rgba(56, 189, 248, 0.14); color: var(--accent); box-shadow: none; }
+
+  .tab-badge { position: absolute; top: 0.2rem; left: calc(50% + 0.4rem); margin: 0; min-width: 1.2rem; line-height: 1.2rem; font-size: 0.68rem; }
+
+  .tabs button.is-live::after { top: 0.35rem; right: auto; left: calc(50% - 1.25rem); }
+
+  /* A field reporter has one screen: no tab bar at all. */
+  body.field-mode .tabs { display: none; }
+
+  body.field-mode .layout { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
+
+  /* -- tables become cards -- */
+  .table-wrap { margin-top: 0.75rem; border: none; border-radius: 0; overflow: visible; }
+
+  table.data, table.data tbody, table.data tr, table.data td { display: block; width: 100%; }
+
+  table.data thead { display: none; }
+
+  table.data tbody { display: grid; gap: 0.6rem; }
+
+  table.data tr {
+    position: relative;
+    padding: 0.6rem 0.85rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--field);
+  }
+
+  /* Each value with its column name on the left… */
+  table.data td {
+    position: relative;
+    min-height: 2rem;
+    padding: 0.4rem 0 0.4rem 38%;
+    border: none;
+    text-align: left;
+    white-space: normal;
+  }
+
+  table.data td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 0;
+    top: 0.45rem;
+    width: calc(38% - 0.6rem);
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  table.data td + td { border-top: 1px solid var(--line); }
+
+  /* …but form fields get the full width, with the name above. */
+  table.data td:has(input:not([type="checkbox"]), select) { padding-left: 0; }
+
+  table.data td:has(input:not([type="checkbox"]), select)::before { position: static; display: block; width: auto; margin-bottom: 0.3rem; }
+
+  /* Unlabelled cells (actions, empty states, full-width rows) span the card. */
+  table.data td:not([data-label]) { padding-left: 0; }
+
+  table.data td:not([data-label])::before { content: none; }
+
+  table.data td:last-child, table.data .num, table.data td.center { text-align: left; }
+
+  /* Empty-state rows ("nothing waiting"), not muted values that have a label. */
+  table.data td.muted:not([data-label]) { padding: 0.4rem 0; }
+
+  table.data input, table.data input[type="text"], table.data select { width: 100%; text-align: left; }
+
+  table.data .actions, .users-table .actions { display: flex; flex-wrap: wrap; width: 100%; gap: 0.5rem; }
+
+  table.data .actions button { flex: 1 1 8rem; }
+
+  table.data tbody tr:hover td { background: none; }
+
+  /* Row selection (sports queue): tap the card; the checkbox sits in its corner. */
+  table.data tr:has(td.cell-check) { padding-right: 3.4rem; cursor: pointer; }
+
+  table.data td.cell-check {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.3rem;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    min-height: 0;
+    padding: 0;
+    border: none;
+  }
+
+  table.data td.cell-check + td { border-top: none; }
+
+  table.data tr.is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+  table.data tr.is-selected td { background: none; }
+
+  table.data tr.is-inactive { opacity: 0.6; }
+
+  table.data tr.is-inactive td { opacity: 1; }
+
+  /* Users: the password-reset row attaches to the card above it. */
+  table.data tr.reset-row { margin-top: -0.5rem; border-top-left-radius: 0; border-top-right-radius: 0; background: var(--surface); }
+
+  .reset-form { justify-content: stretch; }
+
+  table.data .reset-form input[type="text"] { width: 100%; }
+
+  .reset-form button { flex: 1; }
+
+  /* Permission matrix: one card per permission, each role on its own line. */
+  .matrix td.cap-cell { padding: 0 0 0.35rem; }
+
+  .matrix td.cap-cell::before { content: none; }
+
+  .matrix td.cap-cell strong { font-size: 1rem; }
+
+  .matrix td.is-yes, .matrix td.is-no { display: flex; justify-content: flex-end; min-height: 2.1rem; }
+
+  .matrix .matrix-mark { font-size: 1.05rem; }
+
+  /* -- queues -- */
+  .queue-list { grid-template-columns: 1fr; }
+
+  .queue-actions button { min-height: 48px; font-size: 1rem; }
+
+  .bulk-bar { position: sticky; top: 0; z-index: 4; padding: 0.4rem 0; background: var(--surface); }
+
+  .bulk-bar .button-row { flex: 1; }
+
+  .bulk-bar .button-row button { flex: 1; }
+
+  /* -- settings -- */
+  .role-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+
+  .role-card { padding: 0.75rem 0.8rem; }
+
+  .role-card-summary { display: none; }
+
+  .user-toolbar input[type="search"], .user-toolbar select { flex: 1 1 100%; max-width: none; }
+
+  .card-head > button:not(.sun-toggle) { width: 100%; }
+
+  .card-head:has(.sun-toggle) { flex-wrap: nowrap; }
+
+  .sun-toggle { padding: 0.4rem 0.75rem; font-size: 0.88rem; }
+
+  /* -- editors -- */
+  .inline-form > label, .inline-form > label.narrow { flex: 1 1 100%; }
+
+  .inline-form > button, .form-grid button.span-all { width: 100%; }
+
+  .feed-row input { max-width: none; }
+
+  /* -- field reporter: the submit button stays under the thumb -- */
+  body.field-mode .fd-submit {
+    position: sticky;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    z-index: 5;
+    min-height: 3.4rem;
+    font-size: 1.15rem;
+    box-shadow: 0 -6px 18px var(--bg), 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+
+  .fd-candidate { grid-template-columns: minmax(0, 1fr) 7.5rem; padding: 0.8rem; }
+
+  #app .fd-form .fd-votes { min-height: 3.1rem; font-size: 1.3rem; }
+
+  .login-card { padding: 1.5rem 1.25rem 1.25rem; }
+}
+
+/* ---------- field reporter: high contrast (always), sunlight mode (optional) ---------- */
+body.field-mode {
+  --muted: #d3dce8;
+  --faint: #aab6c6;
+  --line-strong: rgba(226, 232, 240, 0.42);
+}
+
+body.field-mode .fd-candidate { border-width: 1.5px; }
+
+body.field-mode .fd-candidate-info strong { font-size: 1.08rem; color: #fff; }
+
+body.field-mode .fd-onair { color: var(--text); }
+
+body.field-mode .fd-pending { color: #fbbf24; font-weight: 600; }
+
+body.field-mode .fd-votes { font-weight: 700; }
+
+body.field-mode .fd-votes::placeholder { color: #9fb0c4; opacity: 1; font-weight: 500; }
+
+/* Sunlight: light, maximum contrast. Colours are checked for >= 7:1 text contrast on white. */
+body.sun {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --field: #ffffff;
+  --line: rgba(15, 23, 42, 0.2);
+  --line-strong: #334155;
+  --text: #020617;
+  --muted: #1e293b;
+  --faint: #334155;
+  --accent: #075985;
+  --accent-ink: #ffffff;
+  --good: #14532d;
+  --warn: #7c2d12;
+  --live: #991b1b;
+  background: #ffffff;
+}
+
+body.sun .topbar { background: rgba(255, 255, 255, 0.97); border-bottom: 2px solid var(--line-strong); }
+
+body.sun .card, body.sun .panel { background: #ffffff; border: 2px solid var(--line-strong); }
+
+body.sun :is(input, select, textarea) { border-width: 2px; border-color: var(--line-strong); color: #000; }
+
+body.sun .fd-candidate { border: 2px solid var(--line-strong); }
+
+body.sun .fd-candidate-info strong { color: #000; }
+
+body.sun .fd-votes::placeholder { color: #475569; }
+
+body.sun .fd-pending { color: var(--warn); }
+
+body.sun .fd-reason { background: #fee2e2; color: #7f1d1d; }
+
+body.sun .status-rejected { color: #991b1b; }
+
+body.sun .status-superseded { color: #334155; }
+
+body.sun button:not(.secondary):not(.danger) { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+body.sun button.secondary { color: var(--accent); border-color: var(--accent); border-width: 2px; }
+
+body.sun .sun-toggle[aria-pressed="true"] { background: #fef08a; border-color: #713f12; color: #1c1917; }
+
+body.sun .conn-pill { color: var(--text); border-color: var(--line-strong); }
+
+body.sun .toast { background: #dcfce7; color: #052e16; border-color: #14532d; }
+
+body.sun .toast[data-kind="error"] { background: #fee2e2; color: #7f1d1d; border-color: #991b1b; }
+
+body.sun.field-mode .fd-submit { box-shadow: 0 -6px 18px #ffffff, 0 8px 20px rgba(2, 6, 23, 0.25); }
+
 @media (prefers-reduced-motion: reduce) {
   .on-air-pill .dot { animation: none; }
+  .sidebar { transition: none; }
+  #app button:active:not(:disabled) { transform: none; }
 }

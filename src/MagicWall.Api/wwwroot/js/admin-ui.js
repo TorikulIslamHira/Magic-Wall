@@ -39,5 +39,41 @@ export function fillSelect(select, items, { value, label, placeholder }) {
   if ([...select.options].some(o => o.value === previous)) select.value = previous;
 }
 
+/**
+ * Phones show table rows as cards (admin.css). Each cell gets its column's heading as
+ * data-label so the card can say what each value is. Rows are re-rendered all the time
+ * (live queues, edits), so every table.data is watched and relabelled on change.
+ */
+export function enableCardTables(root = document) {
+  const label = table => {
+    const headers = [];
+    for (const th of table.querySelectorAll('thead tr:first-child th')) {
+      for (let i = 0; i < th.colSpan; i++) headers.push(th.textContent.trim());
+    }
+    for (const row of table.tBodies[0]?.rows ?? []) {
+      let column = 0;
+      for (const cell of row.cells) {
+        const heading = cell.colSpan > 1 ? '' : headers[column] ?? '';
+        if (heading) cell.dataset.label = heading; else delete cell.dataset.label;
+        cell.classList.toggle('cell-full', cell.colSpan > 1);
+        // A lone checkbox (row selection) sits in the card's corner.
+        const only = cell.children.length === 1 ? cell.firstElementChild : null;
+        cell.classList.toggle('cell-check', !!only?.matches('input[type="checkbox"]') && !cell.textContent.trim());
+        column += cell.colSpan;
+      }
+    }
+  };
+  for (const table of root.querySelectorAll('table.data')) {
+    let queued = false;
+    const relabel = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; label(table); });
+    };
+    new MutationObserver(relabel).observe(table, { childList: true, subtree: true });
+    label(table);
+  }
+}
+
 /** A small coloured status label ("অপেক্ষমাণ", "অনুমোদিত", …). */
 export const statusChip = (status, label) => el('span', { class: `status-chip status-${status.toLowerCase()}` }, label);

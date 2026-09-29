@@ -2,7 +2,8 @@
 <html lang="bn">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070d1a">
   <title>ম্যাজিক ওয়াল · কন্ট্রোল রুম</title>
   <link rel="stylesheet" href="css/fonts.css">
   <link rel="stylesheet" href="css/admin.css">
@@ -34,6 +35,10 @@
 
   <div id="app" hidden>
   <header class="topbar">
+    <button id="nav-toggle" class="nav-toggle" type="button" data-cap="ControlWall"
+            aria-controls="sidebar" aria-expanded="false" aria-label="সম্প্রচার নিয়ন্ত্রণ খুলুন">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
       <div class="brand-text">
@@ -59,7 +64,11 @@
 
   <div class="layout">
     <!-- বাম: কী সম্প্রচারে আছে -->
-    <aside class="sidebar" data-cap="ControlWall">
+    <aside id="sidebar" class="sidebar" data-cap="ControlWall" aria-label="সম্প্রচার নিয়ন্ত্রণ">
+      <div class="drawer-head">
+        <strong>সম্প্রচার নিয়ন্ত্রণ</strong>
+        <button id="nav-close" type="button" class="secondary" aria-label="বন্ধ করুন">✕</button>
+      </div>
       <section class="panel">
         <h2 class="panel-heading">সম্প্রচারে পাঠান</h2>
         <div class="module-switch" role="group" aria-label="সক্রিয় মডিউল">
@@ -90,23 +99,28 @@
       </section>
     </aside>
 
+    <div id="nav-backdrop" class="nav-backdrop" hidden></div>
+
     <!-- ডান: সম্পাদনা -->
     <main class="content">
       <nav class="tabs" role="tablist" aria-label="সম্পাদক">
-        <button type="button" role="tab" data-tab="Submit" data-cap="FieldOnly">ফলাফল জমা</button>
-        <button type="button" role="tab" data-tab="ElectionQueue" data-cap="ReviewElection">নির্বাচন অনুমোদন <span class="tab-badge" id="badge-election" hidden></span></button>
-        <button type="button" role="tab" data-tab="SportsQueue" data-cap="ManageSports">খেলা অনুমোদন <span class="tab-badge" id="badge-sports" hidden></span></button>
-        <button type="button" role="tab" data-tab="Election" data-cap="EditDesk">নির্বাচন</button>
-        <button type="button" role="tab" data-tab="Sports" data-cap="ManageSports">খেলা</button>
-        <button type="button" role="tab" data-tab="War" data-cap="EditDesk">সংঘাত</button>
-        <button type="button" role="tab" data-tab="Budget" data-cap="EditDesk">বাজেট</button>
-        <button type="button" role="tab" data-tab="Settings" data-cap="ManageUsers">সেটিংস</button>
+        <button type="button" role="tab" data-tab="Submit" data-cap="FieldOnly"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg><span class="tab-label">ফলাফল জমা</span></button>
+        <button type="button" role="tab" data-tab="ElectionQueue" data-cap="ReviewElection"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v9H4z"/><path d="M8 11V4h8v7"/><path d="M10 7.5l1.5 1.5 3-3"/></svg><span class="tab-label">নির্বাচন অনুমোদন</span><span class="tab-short">ভোট যাচাই</span> <span class="tab-badge" id="badge-election" hidden></span></button>
+        <button type="button" role="tab" data-tab="SportsQueue" data-cap="ManageSports"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M4 12h10M4 18h6"/><path d="M15 17l2 2 4-4"/></svg><span class="tab-label">খেলা অনুমোদন</span><span class="tab-short">ফিড যাচাই</span> <span class="tab-badge" id="badge-sports" hidden></span></button>
+        <button type="button" role="tab" data-tab="Election" data-cap="EditDesk"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="tab-label">নির্বাচন</span></button>
+        <button type="button" role="tab" data-tab="Sports" data-cap="ManageSports"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8l3.5 2.5-1.3 4h-4.4l-1.3-4z"/></svg><span class="tab-label">খেলা</span></button>
+        <button type="button" role="tab" data-tab="War" data-cap="EditDesk"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.5 2.5 3.5 5 3.5 8s-1 5.5-3.5 8c-2.5-2.5-3.5-5-3.5-8s1-5.5 3.5-8z"/></svg><span class="tab-label">সংঘাত</span></button>
+        <button type="button" role="tab" data-tab="Budget" data-cap="EditDesk"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 4"/></svg><span class="tab-label">বাজেট</span></button>
+        <button type="button" role="tab" data-tab="Settings" data-cap="ManageUsers"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="tab-label">সেটিংস</span></button>
       </nav>
 
       <!-- ===== মাঠ প্রতিবেদক: ফলাফল জমা ===== -->
       <div class="panel-stack field-stack" role="tabpanel" data-panel="Submit" hidden>
         <section class="card">
-          <div class="card-head"><div><h2>ফলাফল জমা দিন</h2><p>আপনার জমা ডেস্কের অনুমোদনের পর ওয়ালে যাবে।</p></div></div>
+          <div class="card-head">
+            <div><h2>ফলাফল জমা দিন</h2><p>আপনার জমা ডেস্কের অনুমোদনের পর ওয়ালে যাবে।</p></div>
+            <button id="fd-sun" type="button" class="secondary sun-toggle" aria-pressed="false">☀ রোদ মোড</button>
+          </div>
           <form id="fd-form" class="fd-form">
             <label>জেলা
               <select id="fd-district"></select>

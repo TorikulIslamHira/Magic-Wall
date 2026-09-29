@@ -6,7 +6,7 @@
 // Every write goes through the REST API; the server broadcasts to all walls and other admin
 // screens over SignalR, so several producers stay in sync.
 import { UNAUTHORIZED_EVENT, connectHub, getJson, sendJson } from './api.js';
-import { $, attempt, fillSelect, toast } from './admin-ui.js';
+import { $, attempt, enableCardTables, fillSelect, toast } from './admin-ui.js';
 import { el, setChildren } from './dom.js';
 import { createFieldForm } from './field.js';
 import { date, num, t } from './i18n.js';
@@ -38,9 +38,62 @@ function setWallState(state) {
 }
 
 for (const button of document.querySelectorAll('[data-module]')) {
-  button.addEventListener('click', () =>
-    pushState({ activeModule: button.dataset.module }, A.onAir(A.modules[button.dataset.module])));
+  button.addEventListener('click', () => {
+    pushState({ activeModule: button.dataset.module }, A.onAir(A.modules[button.dataset.module]));
+    if (isPhone()) setDrawer(false);   // on a phone the drawer covers the page: close it once the choice is made
+  });
 }
+
+// ---------- phones: the on-air controls live in a slide-in drawer ----------
+
+const phoneQuery = matchMedia('(max-width: 768px)');
+const isPhone = () => phoneQuery.matches;
+const drawer = $('#sidebar');
+const navToggle = $('#nav-toggle');
+
+function setDrawer(open) {
+  document.body.classList.toggle('drawer-open', open);
+  navToggle.setAttribute('aria-expanded', String(open));
+  $('#nav-backdrop').hidden = !open;
+  if (open) {
+    loadPreview();
+    drawer.querySelector('[aria-pressed="true"]')?.focus();
+  } else if (drawer.contains(document.activeElement)) {
+    navToggle.focus();
+  }
+}
+
+navToggle.addEventListener('click', () => setDrawer(!document.body.classList.contains('drawer-open')));
+$('#nav-close').addEventListener('click', () => setDrawer(false));
+$('#nav-backdrop').addEventListener('click', () => setDrawer(false));
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.body.classList.contains('drawer-open')) setDrawer(false);
+});
+
+// Swipe the drawer to the left to close it, like a native side menu.
+let swipeStart = null;
+drawer.addEventListener('touchstart', event => {
+  const t = event.touches[0];
+  swipeStart = { x: t.clientX, y: t.clientY };
+}, { passive: true });
+drawer.addEventListener('touchend', event => {
+  if (!swipeStart || !isPhone()) return;
+  const t = event.changedTouches[0];
+  const dx = t.clientX - swipeStart.x;
+  if (dx < -60 && Math.abs(dx) > Math.abs(t.clientY - swipeStart.y) * 1.5) setDrawer(false);
+  swipeStart = null;
+}, { passive: true });
+
+// Growing past phone width (rotating a tablet) puts the sidebar back in the page.
+phoneQuery.addEventListener('change', () => {
+  if (!isPhone()) {
+    setDrawer(false);
+    if (me && !drawer.hidden) loadPreview();
+  }
+});
+
+// Table rows turn into cards on phones; label every cell with its column.
+enableCardTables();
 
 // ---------- tabs ----------
 
@@ -55,10 +108,16 @@ function showTab(name) {
   for (const tab of document.querySelectorAll('[data-tab]')) tab.setAttribute('aria-selected', String(tab.dataset.tab === name));
   for (const panel of document.querySelectorAll('[data-panel]')) panel.hidden = panel.dataset.panel !== name;
   if (name === 'Sports') sports.resizePitch();
+  // With many tabs (admin) the phone's bottom bar scrolls sideways: keep the active one in view.
+  if (isPhone()) document.querySelector(`[data-tab="${name}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 for (const tab of document.querySelectorAll('[data-tab]')) {
-  tab.addEventListener('click', () => showTab(tab.dataset.tab));
+  tab.addEventListener('click', () => {
+    showTab(tab.dataset.tab);
+    // Bottom-bar navigation on a phone: each tab starts at its top, like switching screens in an app.
+    if (isPhone()) window.scrollTo({ top: 0 });
+  });
 }
 
 // ---------- election editor ----------
@@ -888,6 +947,11 @@ new ResizeObserver(() => {
   previewFrame.style.transform = `scale(${preview.clientWidth / 1920})`;
 }).observe(preview);
 
+/** Loads the preview wall once. On phones that waits until the drawer is opened: it's a whole second wall. */
+function loadPreview() {
+  if (!previewFrame.getAttribute('src')) previewFrame.src = previewFrame.dataset.src;
+}
+
 // ---------- live sync ----------
 
 function onDataChanged({ module, key }) {
@@ -1014,8 +1078,9 @@ async function startApp(user) {
 
   await Promise.all(jobs);
   if (initial && caps.has('ControlWall')) await attempt(() => focusEditorsOn(initial));
-  // The live preview is a whole second wall: only load it for people who see the sidebar.
-  if (caps.has('ControlWall')) previewFrame.src = previewFrame.dataset.src;
+  // The live preview is a whole second wall: only load it for people who see the sidebar
+  // (and on phones only once they open the drawer).
+  if (caps.has('ControlWall') && !isPhone()) loadPreview();
   startHub();
 }
 
