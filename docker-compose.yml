@@ -13,8 +13,13 @@ services:
     container_name: magicwall
     restart: unless-stopped
 
+    # Two ports, two audiences. Inside the container they are always 8080 / 8081; the host side
+    # comes from .env. A plain port listens on every network card (IPv4 and IPv6); "IP:port"
+    # (e.g. MAGICWALL_ADMIN_PORT=127.0.0.1:8081) limits it to one address. Don't write 0.0.0.0:
+    # that drops IPv6, and "localhost" then stalls ~2 s per request while falling back to IPv4.
     ports:
-      - "${MAGICWALL_PORT:-8080}:8080"
+      - "${MAGICWALL_PRESENTER_PORT:-8080}:8080"   # presenter: wall + hub, read-only
+      - "${MAGICWALL_ADMIN_PORT:-8081}:8081"       # admin: control room, all writes
 
     environment:
       # Required: compose refuses to start without it, rather than running with admin writes disabled.

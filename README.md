@@ -10,8 +10,11 @@ sports, conflicts and the national budget, driven in real time from a producer's
   - **War & Geopolitics:** world map with a timeline slider; control and casualties change as
     the presenter scrubs through dates. Contested zones are striped.
   - **Budget:** top-5 sector donut, ranked sector list and mega-project progress.
-- **Control room** (`/admin-dashboard.html`) — Bangla dashboard to switch what's on air, enter
-  live data, and watch a live preview of the wall.
+- **Interactive hub** (`/interactive-hub.html`) — full-screen Bangla menu; the presenter opens any
+  module full screen and returns to the menu.
+- **Control room** (`/admin-dashboard.html`) — Bangla dashboard with sign-in and roles: field
+  reporters submit figures, the desk approves them (maker-checker), the sports desk approves the
+  live feed, admins manage users; switch what's on air and watch a live preview of the wall.
 
 Changes reach every screen within a second over SignalR.
 
@@ -28,8 +31,21 @@ cp .env.example .env          # then set MAGICWALL_ADMIN_KEY (e.g. openssl rand 
 docker compose up -d --build
 ```
 
-- Wall: http://localhost:8080/magic-wall.html
-- Control room: http://localhost:8080/admin-dashboard.html (paste the admin key)
+The app listens on **two ports**, one per audience:
+
+| Port | Who | Serves |
+|---|---|---|
+| **8080** presenter | studio floor: wall screens, touch displays | `interactive-hub.html` (opens at `/`), `magic-wall.html`, read-only API, live updates. No sign-in, no writes. |
+| **8081** admin | control room | `admin-dashboard.html` (opens at `/`), sign-in, approval queues, every write endpoint. |
+
+- Interactive hub: http://localhost:8080/
+- Producer-driven wall: http://localhost:8080/magic-wall.html
+- Control room: http://localhost:8081/ (sign in; the first admin comes from `MAGICWALL_BOOTSTRAP_PASSWORD`)
+
+On the presenter port everything outside an allow-list answers 404, so the admin page, sign-in and
+all writes cannot be reached from the studio floor even with a valid key (see
+`src/MagicWall.Api/Hosting/PortIsolation.cs`). Host ports are set in `.env`; an address can be
+added, e.g. `MAGICWALL_ADMIN_PORT=127.0.0.1:8081` keeps the control room on this machine only.
 
 Optional demo data (fictional parties and figures, for rehearsal only):
 
@@ -42,7 +58,8 @@ docker run --rm --user 1654 -v magicwall_magicwall-data:/data -v "$PWD/tools:/to
 
 ```bash
 cd src/MagicWall.Api
-dotnet run --launch-profile http      # http://localhost:5080, admin key: dev-admin-key
+dotnet run --launch-profile http      # presenter http://localhost:5080, admin http://localhost:5081
+                                      # Development seeds demo users (password Demo@1234)
 ```
 
 ## Project layout
@@ -50,7 +67,9 @@ dotnet run --launch-profile http      # http://localhost:5080, admin key: dev-ad
 | Path | What |
 |---|---|
 | `src/MagicWall.Api/Modules/` | One folder per module: entities, EF configuration, endpoints |
-| `src/MagicWall.Api/Wall/` | On-air state, SignalR events, admin-key filter |
+| `src/MagicWall.Api/Wall/` | On-air state, SignalR events |
+| `src/MagicWall.Api/Auth/` | Sign-in, roles and capabilities, user management |
+| `src/MagicWall.Api/Hosting/` | Presenter / admin port isolation |
 | `src/MagicWall.Api/Data/Migrations/` | EF Core migrations (applied on startup) |
 | `src/MagicWall.Api/wwwroot/` | Wall, control room, JS views, bundled libs, fonts, maps |
 | `tools/` | `seed_and_test.py` (API smoke test), `seed_demo.py` (demo data), district table |

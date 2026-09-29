@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using MagicWall.Api.Auth;
 using MagicWall.Api.Data;
+using MagicWall.Api.Hosting;
 using MagicWall.Api.Hubs;
 using MagicWall.Api.Modules.Budget;
 using MagicWall.Api.Modules.Election;
@@ -17,6 +18,18 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ---------- two ports: presenter (read-only, studio floor) and admin (control room) ----------
+var ports = builder.Configuration.GetSection(PortOptions.Section).Get<PortOptions>() ?? new PortOptions();
+if (ports.Presenter == ports.Admin)
+{
+    throw new InvalidOperationException($"Ports:Presenter and Ports:Admin must differ (both are {ports.Presenter}).");
+}
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    kestrel.ListenAnyIP(ports.Presenter);
+    kestrel.ListenAnyIP(ports.Admin);
+});
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("MagicWall")));
@@ -98,6 +111,11 @@ using (var scope = app.Services.CreateScope())
     await AuthEndpoints.EnsureUsersAsync(db, app.Configuration, app.Environment, app.Logger);
 }
 
+// First in the pipeline: the presenter port only ever sees the wall, the hub and read-only data.
+app.UsePortIsolation(ports, app.Logger);
+app.Logger.LogInformation("Presenter port {Presenter} (wall, hub, read-only API); admin port {Admin} (control room)",
+    ports.Presenter, ports.Admin);
+
 // Serves wwwroot/magic-wall.html, admin-dashboard.html and their js/css/maps/fonts.
 // Unknown extensions are never served, so the map files need their type registered.
 var contentTypes = new FileExtensionContentTypeProvider();
@@ -115,7 +133,9 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/", () => Results.Redirect("/magic-wall.html")).ExcludeFromDescription();
+// Each port opens on its own front page.
+app.MapGet("/", (HttpContext http) => Results.Redirect(http.IsPresenterPort(ports) ? "/interactive-hub.html" : "/admin-dashboard.html"))
+    .ExcludeFromDescription();
 
 // The wall's hub stays anonymous: it carries only approved data and queue counts.
 app.MapHub<MagicWallHub>(MagicWallHub.Route);

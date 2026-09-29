@@ -1,5 +1,5 @@
 # Build:  docker build -t magicwall src/MagicWall.Api
-# Run:    docker run -d --name magicwall -p 8080:8080 -v magicwall-data:/data \
+# Run:    docker run -d --name magicwall -p 8080:8080 -p 8081:8081 -v magicwall-data:/data \
 #           -e Admin__ApiKey="<long random secret>" --restart unless-stopped magicwall
 
 # ---- build ----
@@ -22,12 +22,15 @@ RUN mkdir -p /data && chown "$APP_UID" /data
 
 COPY --from=build /app/publish .
 
+# Ports come from Ports__Presenter / Ports__Admin (appsettings: 8080 / 8081), not ASPNETCORE_HTTP_PORTS.
+# The base image's default ASPNETCORE_HTTP_PORTS=8080 is cleared so Kestrel doesn't warn about overriding it.
 ENV ASPNETCORE_ENVIRONMENT=Production \
-    ASPNETCORE_HTTP_PORTS=8080 \
+    ASPNETCORE_HTTP_PORTS= \
     ConnectionStrings__MagicWall="Data Source=/data/magicwall.db"
 
 VOLUME /data
-EXPOSE 8080
+# 8080 = presenter (wall, hub, read-only API)   8081 = admin (control room, all writes)
+EXPOSE 8080 8081
 
 # Non-root user provided by the .NET base image.
 USER $APP_UID
