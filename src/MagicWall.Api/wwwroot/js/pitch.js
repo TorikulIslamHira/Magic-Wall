@@ -16,7 +16,7 @@ export const SPORTS = Object.keys(DIMENSIONS);
 
 // Must match SportEvents.Allowed on the server (Modules/Sports/SportsEntities.cs).
 export const EVENT_TYPES = {
-  Football: ['Pass', 'Shot', 'Goal', 'Tackle', 'Foul', 'Save'],
+  Football: ['Pass', 'Shot', 'Goal', 'Tackle', 'Foul', 'Save', 'OwnGoal', 'YellowCard', 'RedCard', 'Substitution'],
   Cricket: ['Four', 'Six', 'Wicket', 'Catch', 'Delivery'],
   Hockey: ['Pass', 'Shot', 'Goal', 'Tackle', 'PenaltyCorner', 'Save'],
   Kabaddi: ['Raid', 'Tackle', 'Bonus', 'AllOut'],
@@ -26,6 +26,7 @@ export const EVENT_TYPES = {
 
 export const EVENT_COLORS = {
   Pass: '#e5e7eb', Shot: '#fb923c', Goal: '#facc15', Tackle: '#22d3ee', Foul: '#f87171', Save: '#4ade80',
+  OwnGoal: '#fb7185', YellowCard: '#fde047', RedCard: '#dc2626', Substitution: '#38bdf8',
   Four: '#60a5fa', Six: '#c084fc', Wicket: '#ef4444', Catch: '#fde047', Delivery: '#94a3b8',
   PenaltyCorner: '#f472b6',
   Raid: '#facc15', Bonus: '#a3e635', AllOut: '#ef4444',

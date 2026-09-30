@@ -5,10 +5,13 @@
 import { connectHub, getJson } from './api.js';
 import { el, setChildren } from './dom.js';
 import { initFullscreen } from './fullscreen.js';
-import { bnDigits, num, t } from './i18n.js';
+import { languageToggle, localizeDom, num, t } from './i18n.js';
 import { MODULES, createStage, initChrome, setHeader } from './stage.js';
 
-const MENU_HEADER = { title: 'প্রধান মেনু', eyebrow: 'ইন্টারঅ্যাক্টিভ হাব' };
+localizeDom();
+document.querySelector('.topbar .status').prepend(languageToggle('lang-toggle'));
+
+const MENU_HEADER = { title: t.hub.menuTitle, eyebrow: t.hub.menuEyebrow };
 
 const menu = document.getElementById('hub-menu');
 const picker = document.getElementById('hub-picker');
@@ -20,7 +23,7 @@ const stage = createStage(stageEl, {
   onModule: module => setHeader(module, MENU_HEADER)
 });
 
-// ---------- routing: #Election, #Sports/3/7, #War, #Budget; empty = menu ----------
+// ---------- routing: #Election, #Sports/3/7 (player), #Sports/3/all (whole match), #War, #Budget; empty = menu ----------
 
 function navigate(hash) {
   if (location.hash.slice(1) === hash) route();
@@ -50,7 +53,7 @@ async function route() {
   await stage.show(module, {
     activeModule: module,
     matchId: matchId ? Number(matchId) : null,
-    playerId: playerId ? Number(playerId) : null
+    playerId: playerId && playerId !== 'all' ? Number(playerId) : null
   });
 }
 
@@ -82,40 +85,51 @@ async function refreshStats() {
     settle('Election', async () => {
       const seats = (await getJson('/api/election/constituencies')) ?? [];
       const declared = seats.filter(s => s.leadingParty).length;
-      return `${num(declared)} / ${num(seats.length)} আসনে ফলাফল`;
+      return t.hub.declared(declared, seats.length);
     }),
     settle('Sports', async () => {
       const matches = (await getJson('/api/sports/matches')) ?? [];
-      return `${num(matches.length)}টি ম্যাচ`;
+      return t.hub.matches(matches.length);
     }),
     settle('War', async () => {
       const zones = (await getJson('/api/war/zones')) ?? [];
-      return `${num(zones.length)}টি সংঘাতপূর্ণ অঞ্চল`;
+      return t.hub.zones(zones.length);
     }),
     settle('Budget', async () => {
       const years = (await getJson('/api/budget/fiscal-years')) ?? [];
       if (!years.length) return '';
       const sectors = (await getJson(`/api/budget/sectors?fiscalYear=${encodeURIComponent(years[0])}`)) ?? [];
       const total = sectors.reduce((sum, s) => sum + s.totalAllocation, 0);
-      return `${bnDigits(years[0])} · ${num(total)} কোটি টাকা`;
+      return t.hub.budget(years[0], total);
     })
   ]);
 }
 
 // ---------- sports picker: match, then player ----------
 
+const teamBadge = (url, name) => url
+  ? el('img', { class: 'picker-badge', src: url, alt: '' })
+  : el('span', { class: 'picker-badge is-empty', 'aria-hidden': 'true' }, (name || '?').slice(0, 1));
+
 async function renderPicker(matchId) {
   if (!matchId) {
     const matches = (await getJson('/api/sports/matches')) ?? [];
     setChildren(picker,
-      el('h2', { class: 'picker-title' }, 'একটি ম্যাচ বেছে নিন'),
+      el('h2', { class: 'picker-title' }, t.hub.chooseMatch),
       matches.length
         ? el('div', { class: 'picker-grid' }, matches.map(m =>
             el('button', { type: 'button', class: 'picker-card', onclick: () => navigate(`Sports/${m.id}`) },
-              el('span', { class: 'picker-eyebrow' }, t.sports.sports[m.sport] ?? m.sport),
+              el('span', { class: 'picker-eyebrow' }, [t.sports.sports[m.sport] ?? m.sport, m.competition].filter(Boolean).join(' · ')),
               el('span', { class: 'picker-name' }, m.title),
-              el('span', { class: 'picker-sub' }, `${m.teamA} বনাম ${m.teamB}`))))
-        : el('p', { class: 'hint' }, 'এখনো কোনো ম্যাচ নেই।'));
+              // Both teams with their badges, and the score once there is one.
+              el('span', { class: 'picker-teams' },
+                teamBadge(m.teamABadge, m.teamA), el('span', {}, m.teamA),
+                el('strong', { class: 'picker-score' }, m.scoreA != null && m.scoreB != null
+                  ? `${num(m.scoreA)} – ${num(m.scoreB)}` : t.admin.sports.versus),
+                el('span', {}, m.teamB), teamBadge(m.teamBBadge, m.teamB)),
+              // NOT_FOUND is the desk's problem (a wrong feed id), not something for the audience.
+              m.feedStatus && m.feedStatus !== 'NOT_FOUND' ? el('span', { class: 'picker-sub' }, t.sports.status[m.feedStatus] ?? m.feedStatus) : null)))
+        : el('p', { class: 'hint' }, t.hub.noMatches));
     return;
   }
 
@@ -125,15 +139,21 @@ async function renderPicker(matchId) {
   ]);
   const match = (matches ?? []).find(m => m.id === matchId);
   setChildren(picker,
-    el('button', { type: 'button', class: 'back', onclick: () => navigate('Sports') }, '← সব ম্যাচ'),
-    el('h2', { class: 'picker-title' }, match ? `${match.title}: একজন খেলোয়াড় বেছে নিন` : 'একজন খেলোয়াড় বেছে নিন'),
+    el('button', { type: 'button', class: 'back', onclick: () => navigate('Sports') }, t.hub.allMatches),
+    el('h2', { class: 'picker-title' }, t.hub.choosePlayer(match?.title)),
+    // Whole match first: scoreboard, timeline and spotlight, no single player needed.
+    el('div', { class: 'picker-grid' },
+      el('button', { type: 'button', class: 'picker-card is-overview', onclick: () => navigate(`Sports/${matchId}/all`) },
+        el('span', { class: 'picker-eyebrow' }, t.sports.timeline),
+        el('span', { class: 'picker-name' }, t.sports.matchOverview),
+        el('span', { class: 'picker-sub' }, t.sports.matchOverviewHint))),
     (players ?? []).length
       ? el('div', { class: 'picker-grid' }, players.map(p =>
           el('button', { type: 'button', class: 'picker-card', onclick: () => navigate(`Sports/${matchId}/${p.id}`) },
             el('span', { class: 'picker-eyebrow' }, p.team),
             el('span', { class: 'picker-name' }, p.name),
             p.role ? el('span', { class: 'picker-sub' }, p.role) : null)))
-      : el('p', { class: 'hint' }, 'এই ম্যাচে কোনো খেলোয়াড় নেই।'));
+      : el('p', { class: 'hint' }, t.hub.noPlayers));
 }
 
 // ---------- start ----------

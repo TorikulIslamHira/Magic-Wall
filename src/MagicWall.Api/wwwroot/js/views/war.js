@@ -7,7 +7,7 @@
 import { getJson } from '../api.js';
 import { el, prefersReducedMotion, setChildren } from '../dom.js';
 import { collection, createGeoMap, loadGeoJson } from '../geo.js';
-import { date, num, t } from '../i18n.js';
+import { LANG, date, num, t } from '../i18n.js';
 import { NEUTRAL, categoricalScale } from '../palette.js';
 
 // Vendored UMD build, loaded by magic-wall.html from lib/d3.
@@ -53,7 +53,7 @@ export function createWarView() {
     legend = el('div', { class: 'legend-row' });
     detail = el('div', { class: 'war-detail' });
     ticks = el('div', { class: 'timeline-ticks' });
-    slider = el('input', { class: 'timeline-slider', type: 'range', min: 0, max: 0, step: 1, value: 0, 'aria-label': 'Timeline' });
+    slider = el('input', { class: 'timeline-slider', type: 'range', min: 0, max: 0, step: 1, value: 0, 'aria-label': tx.timeline });
     playButton = el('button', { class: 'chip', type: 'button', onclick: togglePlay }, `▶ ${tx.play}`);
 
     slider.addEventListener('input', () => {
@@ -62,7 +62,7 @@ export function createWarView() {
     });
 
     container.append(el('div', { class: 'war' },
-      el('div', { class: 'map-card glass' }, stage, emptyMessage, el('p', { class: 'map-credit' }, 'মানচিত্র: Natural Earth')),
+      el('div', { class: 'map-card glass' }, stage, emptyMessage, el('p', { class: 'map-credit' }, tx.mapCredit)),
       el('aside', { class: 'side-panel glass' },
         el('div', { class: 'hero' }, el('span', { class: 'eyebrow' }, tx.casualtiesAll), heroValue),
         detail),
@@ -169,7 +169,7 @@ export function createWarView() {
       .attr('class', 'zone')
       .attr('d', z => map.path(z.feature))
       .attr('tabindex', 0)
-      .attr('aria-label', z => z.regionName)
+      .attr('aria-label', z => zoneName(z))
       .on('click', (event, z) => {
         event.stopPropagation();
         select(z.svgPathId === selected ? null : z.svgPathId);
@@ -185,7 +185,7 @@ export function createWarView() {
         return g;
       })
       .attr('transform', z => `translate(${map.path.centroid(z.feature)})`);
-    groups.select('.zone-name').text(z => z.regionName);
+    groups.select('.zone-name').text(z => zoneName(z));
     onZoom(zoomLevel);
   }
 
@@ -311,7 +311,7 @@ export function createWarView() {
     const latest = latestById.get(zone.svgPathId);
     setChildren(detail,
       el('button', { class: 'back', type: 'button', onclick: () => select(null) }, `← ${tx.allZones}`),
-      el('h2', { class: 'panel-title' }, zone.regionName),
+      el('h2', { class: 'panel-title' }, zoneName(zone)),
       el('div', { class: 'stats two' },
         statTile(tx.controlledBy, latest ? forceLabel(latest.controllingForce) : tx.noReports, latest ? swatchStyle(latest.controllingForce) : null),
         statTile(tx.casualtiesToDate, num(latest?.cumulative ?? 0))),
@@ -342,7 +342,7 @@ export function createWarView() {
         el('li', {},
           el('button', { class: 'zone-row', type: 'button', onclick: () => select(zone.svgPathId) },
             el('span', { class: 'swatch lg', style: latest ? swatchStyle(latest.controllingForce) : `background:${NEUTRAL}` }),
-            el('span', { class: 'zone-row-name' }, zone.regionName, el('small', {}, latest ? forceLabel(latest.controllingForce) : tx.noReports)),
+            el('span', { class: 'zone-row-name' }, zoneName(zone), el('small', {}, latest ? forceLabel(latest.controllingForce) : tx.noReports)),
             el('strong', {}, num(latest?.cumulative ?? 0)))))));
   }
 
@@ -400,6 +400,15 @@ export function createWarView() {
 
   function clampDay(day) {
     return Math.min(maxDay, Math.max(minDay, day));
+  }
+
+  /**
+   * The zone's name as the desk wrote it; in English, the map's English name when the desk used
+   * that country's standard Bangla name (a custom label, e.g. a region, stays as written).
+   */
+  function zoneName(zone) {
+    const props = zone.feature?.properties;
+    return LANG === 'en' && props?.name_en && props.name_bn === zone.regionName ? props.name_en : zone.regionName;
   }
 
   function findZone(regionName) {

@@ -6,7 +6,7 @@
 // the legend, and every sector (including those inside "Other") is selectable there.
 import { getJson } from '../api.js';
 import { el, prefersReducedMotion } from '../dom.js';
-import { bnDigits, num, pct, t, taka } from '../i18n.js';
+import { digits, num, pct, t, taka } from '../i18n.js';
 import { NEUTRAL, categoricalScale } from '../palette.js';
 
 // Vendored UMD build, loaded by magic-wall.html from lib/d3 (no CDN on air-gapped networks).
@@ -232,11 +232,11 @@ export function createBudgetView() {
         el('span', { class: 'project-head' },
           el('span', { class: 'project-name' }, project.name),
           el('span', { class: 'project-amount' }, taka(project.budgetAmount))),
-        el('span', { class: 'meter', role: 'meter', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': project.completionPercentage, 'aria-label': 'Completion' },
+        el('span', { class: 'meter', role: 'meter', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': project.completionPercentage, 'aria-label': tx.completion },
           el('span', { class: 'meter-fill', style: `width:${project.completionPercentage}%` })),
         el('span', { class: 'project-sub' },
           el('span', {}, tx.complete(project.completionPercentage)),
-          project.geoLocation ? el('span', { class: 'muted' }, bnDigits(project.geoLocation)) : null),
+          project.geoLocation ? el('span', { class: 'muted' }, digits(project.geoLocation)) : null),
         expanded
           ? el('span', { class: 'project-more' },
               el('span', {}, `${tx.shareOfSector} `, el('strong', {}, pct(shareOfSector))),

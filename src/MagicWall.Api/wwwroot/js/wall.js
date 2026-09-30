@@ -2,7 +2,9 @@
 // (The presenter-driven alternative, with a touch menu, is interactive-hub.html.)
 import { connectHub, getJson } from './api.js';
 import { initFullscreen } from './fullscreen.js';
-import { t } from './i18n.js';
+import { localizeDom, t } from './i18n.js';
+
+localizeDom();   // the page's static text in the chosen language (?lang=en or the saved choice)
 import { createStage, initChrome, setHeader } from './stage.js';
 
 const stage = createStage(document.getElementById('stage'), {

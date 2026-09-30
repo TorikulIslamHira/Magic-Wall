@@ -7,7 +7,7 @@
 import { getJson } from '../api.js';
 import { el, setChildren } from '../dom.js';
 import { collection, createGeoMap, loadGeoJson } from '../geo.js';
-import { num, pct, t } from '../i18n.js';
+import { LOCALE, divisionName, num, pct, placeName, t } from '../i18n.js';
 import { partyColorScale } from '../parties.js';
 
 // Vendored UMD build, loaded by magic-wall.html from lib/d3.
@@ -40,7 +40,7 @@ export function createElectionView() {
     panel = el('aside', { class: 'side-panel glass' });
     race = el('section', { class: 'race glass' });
     container.append(el('div', { class: 'election' },
-      el('div', { class: 'map-card glass' }, stage, el('p', { class: 'map-credit' }, 'সীমানা: BBS / OCHA (geoBoundaries)')),
+      el('div', { class: 'map-card glass' }, stage, el('p', { class: 'map-credit' }, tx.boundaryCredit)),
       panel,
       race));
 
@@ -95,7 +95,7 @@ export function createElectionView() {
       .attr('class', 'region')
       .attr('d', map.path)
       .attr('tabindex', 0)
-      .attr('aria-label', f => f.properties.name_bn ?? f.properties.code)
+      .attr('aria-label', f => placeName(f.properties))
       .on('click', (event, f) => {
         event.stopPropagation();
         if (seatMap) selectSeat(f.properties.code);
@@ -116,7 +116,7 @@ export function createElectionView() {
     labels = map.layer.append('g').attr('class', 'region-labels')
       .selectAll('text').data(districts.features).join('text')
       .attr('transform', f => `translate(${map.path.centroid(f)})`)
-      .text(f => f.properties.name_bn);
+      .text(f => placeName(f.properties));
 
     // Tapping the sea returns to the national view.
     map.svg.on('click', () => { if (selectedDistrict || selectedSeat) selectDistrict(null); });
@@ -243,12 +243,12 @@ export function createElectionView() {
     const feature = districtByCode.get(code);
     const inDistrict = seats
       .filter(s => s.districtCode === code)
-      .sort((a, b) => a.name.localeCompare(b.name, 'bn', { numeric: true }));
+      .sort((a, b) => a.name.localeCompare(b.name, LOCALE, { numeric: true }));
 
     setChildren(panel,
       el('button', { class: 'back', type: 'button', onclick: () => selectDistrict(null) }, `← ${tx.national}`),
-      el('p', { class: 'eyebrow' }, `${feature?.properties.division_bn ?? ''} বিভাগ`),
-      el('h2', { class: 'panel-title' }, feature?.properties.name_bn ?? code),
+      el('p', { class: 'eyebrow' }, tx.division(divisionName(feature?.properties))),
+      el('h2', { class: 'panel-title' }, placeName(feature?.properties) || code),
       el('p', { class: 'muted' }, tx.seats(inDistrict.length)),
       el('ol', { class: 'seat-list' }, inDistrict.map(seat =>
         el('li', {},
@@ -284,9 +284,9 @@ export function createElectionView() {
 
     setChildren(panel,
       district
-        ? el('button', { class: 'back', type: 'button', onclick: () => selectDistrict(dto.districtCode) }, `← ${district.properties.name_bn}`)
+        ? el('button', { class: 'back', type: 'button', onclick: () => selectDistrict(dto.districtCode) }, `← ${placeName(district.properties)}`)
         : el('button', { class: 'back', type: 'button', onclick: () => selectDistrict(null) }, `← ${tx.national}`),
-      el('p', { class: 'eyebrow' }, district ? `${district.properties.name_bn} জেলা` : tx.national),
+      el('p', { class: 'eyebrow' }, district ? tx.district(placeName(district.properties)) : tx.national),
       el('h2', { class: 'panel-title' }, dto.name),
       el('div', { class: 'stats' },
         stat(tx.turnout, pct(dto.turnoutPercentage)),

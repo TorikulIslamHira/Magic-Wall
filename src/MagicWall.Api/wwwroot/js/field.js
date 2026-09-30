@@ -4,7 +4,7 @@
 import { getJson, sendJson } from './api.js';
 import { el, setChildren } from './dom.js';
 import { $, attempt, fillSelect, statusChip, toast } from './admin-ui.js';
-import { ago, num, t } from './i18n.js';
+import { LOCALE, ago, num, placeName, t } from './i18n.js';
 
 const F = t.admin.field;
 const SUN_KEY = 'magicwall.sunlight';
@@ -53,15 +53,15 @@ export function createFieldForm() {
     seats = summaries ?? [];
     const withSeats = new Set(seats.map(s => s.districtCode));
     const options = (districts?.features ?? []).map(f => f.properties).filter(d => withSeats.has(d.code))
-      .sort((a, b) => a.name_bn.localeCompare(b.name_bn, 'bn'));
-    fillSelect(districtSelect, options, { value: d => d.code, label: d => d.name_bn, placeholder: F.chooseDistrict });
+      .sort((a, b) => placeName(a).localeCompare(placeName(b), LOCALE));
+    fillSelect(districtSelect, options, { value: d => d.code, label: d => placeName(d), placeholder: F.chooseDistrict });
     renderSeats();
     await refreshMine();
   }
 
   function renderSeats() {
     const inDistrict = seats.filter(s => s.districtCode === districtSelect.value)
-      .sort((a, b) => a.name.localeCompare(b.name, 'bn', { numeric: true }));
+      .sort((a, b) => a.name.localeCompare(b.name, LOCALE, { numeric: true }));
     fillSelect(seatSelect, inDistrict, { value: s => s.svgPathId, label: s => s.name, placeholder: F.chooseSeat });
     seatSelect.disabled = inDistrict.length === 0;
     loadCandidates();
@@ -90,7 +90,7 @@ export function createFieldForm() {
       const myPending = mine.find(s => s.status === 'Pending' && s.constituencyId === seat.id && s.candidateId === c.candidateId);
       const input = el('input', {
         type: 'number', inputmode: 'numeric', min: 0, step: 1, class: 'fd-votes',
-        placeholder: c.approvedVotes == null ? '0' : String(c.approvedVotes), 'aria-label': `${c.name}: নতুন সংখ্যা`
+        placeholder: c.approvedVotes == null ? '0' : String(c.approvedVotes), 'aria-label': F.newCount(c.name)
       });
       inputs.set(c.candidateId, input);
       return el('div', { class: 'fd-candidate' },

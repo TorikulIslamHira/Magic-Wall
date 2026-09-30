@@ -33,10 +33,11 @@ public static class PortIsolation
         "/config/parties.json",
         // Shared modules the wall and hub import (admin.js, review.js, field.js, users.js, admin-ui.js are not here).
         "/js/api.js", "/js/dom.js", "/js/i18n.js", "/js/stage.js", "/js/wall.js", "/js/hub.js",
-        "/js/fullscreen.js", "/js/geo.js", "/js/palette.js", "/js/parties.js", "/js/pitch.js"
+        "/js/fullscreen.js", "/js/geo.js", "/js/palette.js", "/js/parties.js", "/js/pitch.js",
+        "/js/spotlight.js", "/js/timeline.js", "/js/i18n-en.js"
     };
 
-    private static readonly string[] PresenterFolders = ["/js/views/", "/lib/", "/maps/", "/fonts/"];
+    private static readonly string[] PresenterFolders = ["/js/views/", "/lib/", "/maps/", "/fonts/", "/media/"];
 
     /// <summary>Read-only endpoints the presenter pages call. GET/HEAD only.</summary>
     private static readonly HashSet<string> PresenterReads = new(StringComparer.OrdinalIgnoreCase)
@@ -50,7 +51,8 @@ public static class PortIsolation
 
     private static readonly string[] PresenterReadPrefixes =
     [
-        "/api/election/results/", "/api/sports/events/", "/api/war/timeline/"
+        "/api/election/results/", "/api/sports/events/", "/api/war/timeline/",
+        "/api/sports/matches/"   // GET …/{id}/timeline (writes under this path are PUTs, refused here)
     ];
 
     public static bool IsAllowedOnPresenter(HttpRequest request)

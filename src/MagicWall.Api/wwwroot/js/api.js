@@ -1,12 +1,13 @@
 // Shared fetch + SignalR plumbing for the wall and the admin dashboard.
 // Expects the SignalR browser client to be loaded as a classic script (global `signalR`).
+import { LANG, t } from './i18n.js';
 
 /** Fired when a write comes back 401 (session expired or signed out elsewhere). */
 export const UNAUTHORIZED_EVENT = 'magicwall:unauthorized';
 
 /** GET JSON. Resolves to null on 404 so callers can show "not found" without try/catch. */
 export async function getJson(url, signal) {
-  const res = await fetch(url, { headers: { Accept: 'application/json' }, signal });
+  const res = await fetch(url, { headers: { Accept: 'application/json', 'Accept-Language': LANG }, signal });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} (${url})`);
   return res.json();
@@ -17,18 +18,20 @@ export async function getJson(url, signal) {
  * every request with its status (open the browser console to trace a save), and turns
  * failures into a readable Error carrying `.status`.
  */
-export async function sendJson(method, url, body) {
+export async function sendJson(method, url, body, { keepalive = false } = {}) {
   const started = performance.now();
   let res;
   try {
     res = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body)
+      // The server answers validation errors in this language (see Hosting/Text.cs).
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'Accept-Language': LANG },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      keepalive   // lets a last pending action finish while the page closes (see deferWithUndo)
     });
   } catch (networkError) {
     console.error(`[admin] ${method} ${url} → network error`, networkError);
-    throw Object.assign(new Error('সংরক্ষণ ব্যর্থ: সার্ভারে পৌঁছানো যাচ্ছে না। সার্ভার চালু আছে কি না দেখুন।'), { status: 0 });
+    throw Object.assign(new Error(t.api.unreachable), { status: 0 });
   }
 
   const ms = Math.round(performance.now() - started);
@@ -50,11 +53,11 @@ function safeParse(text) {
 }
 
 function failureMessage(status, data, text) {
-  const prefix = `সংরক্ষণ ব্যর্থ (HTTP ${status})`;
-  if (status === 401) return `${prefix}: সেশন শেষ হয়েছে — আবার লগইন করুন।`;
-  if (status === 403 && !data?.detail) return `${prefix}: এই কাজের অনুমতি আপনার নেই।`;
+  const prefix = t.api.failed(status);
+  if (status === 401) return `${prefix}: ${t.api.expired}`;
+  if (status === 403 && !data?.detail) return `${prefix}: ${t.api.forbidden}`;
   if (status === 403) return `${prefix}: ${data.detail}`;
-  if (status >= 500 && status !== 503) return `${prefix}: সার্ভার ত্রুটি — সার্ভারের লগ দেখুন (docker compose logs)।`;
+  if (status >= 500 && status !== 503) return `${prefix}: ${t.api.serverError}`;
   if (data?.errors) return `${prefix}: ${Object.values(data.errors).flat().join(' ')}`;
   if (typeof data === 'string') return `${prefix}: ${data}`;
   return `${prefix}: ${data?.detail ?? data?.title ?? text ?? ''}`.trim();
