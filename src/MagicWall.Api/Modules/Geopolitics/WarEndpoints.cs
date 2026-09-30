@@ -1,3 +1,4 @@
+using MagicWall.Api.Hosting;
 using MagicWall.Api.Auth;
 using MagicWall.Api.Data;
 using MagicWall.Api.Hubs;
@@ -118,13 +119,13 @@ public static class WarEndpoints
         var svgPathId = request.SvgPathId?.Trim() ?? string.Empty;
 
         var errors = new Dictionary<string, string[]>();
-        if (regionName.Length is 0 or > 150) errors["regionName"] = ["অঞ্চলের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।"];
-        if (svgPathId.Length is 0 or > 100) errors["svgPathId"] = ["মানচিত্র কোড দিন (সর্বোচ্চ ১০০ অক্ষর)।"];
+        if (regionName.Length is 0 or > 150) errors["regionName"] = [Text.L("অঞ্চলের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।", "Enter the region name (up to 150 characters).")];
+        if (svgPathId.Length is 0 or > 100) errors["svgPathId"] = [Text.L("মানচিত্র কোড দিন (সর্বোচ্চ ১০০ অক্ষর)।", "Enter the map code (up to 100 characters).")];
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
         if (await db.ConflictZones.AnyAsync(z => z.SvgPathId == svgPathId, ct))
         {
-            return TypedResults.Conflict($"\"{svgPathId}\" মানচিত্র কোড আগেই অন্য একটি অঞ্চলে ব্যবহৃত হয়েছে।");
+            return TypedResults.Conflict(Text.L($"\"{svgPathId}\" মানচিত্র কোড আগেই অন্য একটি অঞ্চলে ব্যবহৃত হয়েছে।", $"Map code \"{svgPathId}\" is already used by another region."));
         }
 
         var zone = new ConflictZone { RegionName = regionName, SvgPathId = svgPathId };
@@ -142,9 +143,9 @@ public static class WarEndpoints
         var description = request.Description?.Trim() ?? string.Empty;
 
         var errors = new Dictionary<string, string[]>();
-        if (force.Length is 0 or > 150) errors["controllingForce"] = ["নিয়ন্ত্রণকারী পক্ষের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।"];
-        if (request.Casualties < 0) errors["casualties"] = ["হতাহতের সংখ্যা ঋণাত্মক হতে পারে না।"];
-        if (description.Length > 2000) errors["description"] = ["বিবরণ সর্বোচ্চ ২০০০ অক্ষর হতে পারে।"];
+        if (force.Length is 0 or > 150) errors["controllingForce"] = [Text.L("নিয়ন্ত্রণকারী পক্ষের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।", "Enter the controlling force (up to 150 characters).")];
+        if (request.Casualties < 0) errors["casualties"] = [Text.L("হতাহতের সংখ্যা ঋণাত্মক হতে পারে না।", "Casualties can't be negative.")];
+        if (description.Length > 2000) errors["description"] = [Text.L("বিবরণ সর্বোচ্চ ২০০০ অক্ষর হতে পারে।", "The description can be up to 2000 characters.")];
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
         var regionName = await db.ConflictZones
@@ -154,7 +155,7 @@ public static class WarEndpoints
 
         if (regionName is null)
         {
-            return TypedResults.NotFound("সংঘাতপূর্ণ অঞ্চলটি পাওয়া যায়নি।");
+            return TypedResults.NotFound(Text.L("সংঘাতপূর্ণ অঞ্চলটি পাওয়া যায়নি।", "Conflict zone not found."));
         }
 
         var entity = new TimelineEvent

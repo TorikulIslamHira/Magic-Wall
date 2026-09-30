@@ -19,6 +19,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<Player> Players => Set<Player>();
     public DbSet<MatchEvent> MatchEvents => Set<MatchEvent>();
+    public DbSet<TeamMedia> TeamMedia => Set<TeamMedia>();
 
     // Module C: War & Geopolitics
     public DbSet<ConflictZone> ConflictZones => Set<ConflictZone>();

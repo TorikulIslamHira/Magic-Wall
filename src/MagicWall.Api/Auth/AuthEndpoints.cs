@@ -1,3 +1,4 @@
+using MagicWall.Api.Hosting;
 using System.Security.Claims;
 using MagicWall.Api.Data;
 using Microsoft.AspNetCore.Authentication;
@@ -99,7 +100,7 @@ public static class AuthEndpoints
         }
 
         if (context.Principal!.FindFirstValue(ClaimTypes.Role) != user.Role.ToString()
-            || context.Principal.DisplayNameOf() != user.DisplayName)
+            || context.Principal!.DisplayNameOf() != user.DisplayName)
         {
             context.ReplacePrincipal(CreatePrincipal(userName!, user.DisplayName, user.Role));
             context.ShouldRenew = true;
@@ -148,15 +149,15 @@ public static class AuthEndpoints
 
         var errors = new Dictionary<string, string[]>();
         if (userName.Length is < 3 or > 60 || !userName.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-'))
-            errors["userName"] = ["ব্যবহারকারীর নাম ৩–৬০ অক্ষরের হবে; শুধু ইংরেজি অক্ষর, সংখ্যা, . _ -"];
-        if (displayName.Length is 0 or > 120) errors["displayName"] = ["প্রদর্শিত নাম দিন (সর্বোচ্চ ১২০ অক্ষর)।"];
-        if ((request.Password?.Length ?? 0) < MinPasswordLength) errors["password"] = ["পাসওয়ার্ড অন্তত ৮ অক্ষরের হতে হবে।"];
-        if (!Enum.IsDefined(request.Role)) errors["role"] = ["অজানা ভূমিকা।"];
+            errors["userName"] = [Text.L("ব্যবহারকারীর নাম ৩–৬০ অক্ষরের হবে; শুধু ইংরেজি অক্ষর, সংখ্যা, . _ -", "User name must be 3–60 characters: English letters, digits, . _ - only.")];
+        if (displayName.Length is 0 or > 120) errors["displayName"] = [Text.L("প্রদর্শিত নাম দিন (সর্বোচ্চ ১২০ অক্ষর)।", "Enter a display name (up to 120 characters).")];
+        if ((request.Password?.Length ?? 0) < MinPasswordLength) errors["password"] = [Text.L("পাসওয়ার্ড অন্তত ৮ অক্ষরের হতে হবে।", "Password must be at least 8 characters.")];
+        if (!Enum.IsDefined(request.Role)) errors["role"] = [Text.L("অজানা ভূমিকা।", "Unknown role.")];
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
         if (await db.Users.AnyAsync(u => u.UserName == userName, ct))
         {
-            return TypedResults.Conflict($"\"{userName}\" নামে ব্যবহারকারী আগেই আছে।");
+            return TypedResults.Conflict(Text.L($"\"{userName}\" নামে ব্যবহারকারী আগেই আছে।", $"A user named \"{userName}\" already exists."));
         }
 
         var user = new AppUser { UserName = userName, DisplayName = displayName, Role = request.Role };
@@ -175,17 +176,17 @@ public static class AuthEndpoints
 
         var errors = new Dictionary<string, string[]>();
         var displayName = request.DisplayName?.Trim() ?? string.Empty;
-        if (displayName.Length is 0 or > 120) errors["displayName"] = ["প্রদর্শিত নাম দিন (সর্বোচ্চ ১২০ অক্ষর)।"];
-        if (request.Password is { Length: > 0 and < MinPasswordLength }) errors["password"] = ["পাসওয়ার্ড অন্তত ৮ অক্ষরের হতে হবে।"];
-        if (!Enum.IsDefined(request.Role)) errors["role"] = ["অজানা ভূমিকা।"];
+        if (displayName.Length is 0 or > 120) errors["displayName"] = [Text.L("প্রদর্শিত নাম দিন (সর্বোচ্চ ১২০ অক্ষর)।", "Enter a display name (up to 120 characters).")];
+        if (request.Password is { Length: > 0 and < MinPasswordLength }) errors["password"] = [Text.L("পাসওয়ার্ড অন্তত ৮ অক্ষরের হতে হবে।", "Password must be at least 8 characters.")];
+        if (!Enum.IsDefined(request.Role)) errors["role"] = [Text.L("অজানা ভূমিকা।", "Unknown role.")];
 
         // Never lock the newsroom out: no admin can remove their own access, and the last
         // active admin stays an active admin.
         var losesAdmin = user is { Role: UserRole.Admin, IsActive: true } && (request.Role != UserRole.Admin || !request.IsActive);
         if (losesAdmin && user.UserName == me.UserName())
-            errors["role"] = ["নিজের অ্যাডমিন অধিকার বা অ্যাকাউন্ট বন্ধ করা যায় না — অন্য একজন অ্যাডমিনকে দিয়ে করান।"];
+            errors["role"] = [Text.L("নিজের অ্যাডমিন অধিকার বা অ্যাকাউন্ট বন্ধ করা যায় না — অন্য একজন অ্যাডমিনকে দিয়ে করান।", "You can't remove your own admin access or deactivate yourself — ask another admin.")];
         else if (losesAdmin && !await db.Users.AnyAsync(u => u.Id != id && u.Role == UserRole.Admin && u.IsActive, ct))
-            errors["role"] = ["এটিই শেষ সক্রিয় অ্যাডমিন অ্যাকাউন্ট। আগে আরেকজন অ্যাডমিন তৈরি করুন।"];
+            errors["role"] = [Text.L("এটিই শেষ সক্রিয় অ্যাডমিন অ্যাকাউন্ট। আগে আরেকজন অ্যাডমিন তৈরি করুন।", "This is the last active admin account. Create another admin first.")];
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
         user.DisplayName = displayName;

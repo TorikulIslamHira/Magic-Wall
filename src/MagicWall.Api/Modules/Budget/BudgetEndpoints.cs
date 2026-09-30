@@ -1,3 +1,4 @@
+using MagicWall.Api.Hosting;
 using MagicWall.Api.Auth;
 using MagicWall.Api.Data;
 using MagicWall.Api.Hubs;
@@ -106,7 +107,7 @@ public static class BudgetEndpoints
 
         if (await db.BudgetSectors.AnyAsync(s => s.FiscalYear == fiscalYear && s.Name == name, ct))
         {
-            return TypedResults.Conflict($"\"{name}\" খাতটি {fiscalYear} অর্থবছরে আগেই আছে।");
+            return TypedResults.Conflict(Text.L($"\"{name}\" খাতটি {fiscalYear} অর্থবছরে আগেই আছে।", $"The sector \"{name}\" already exists for fiscal year {fiscalYear}."));
         }
 
         var sector = new BudgetSector { Name = name, FiscalYear = fiscalYear, TotalAllocation = request.TotalAllocation };
@@ -130,7 +131,7 @@ public static class BudgetEndpoints
 
         if (await db.BudgetSectors.AnyAsync(s => s.Id != id && s.FiscalYear == fiscalYear && s.Name == name, ct))
         {
-            return TypedResults.Conflict($"\"{name}\" খাতটি {fiscalYear} অর্থবছরে আগেই আছে।");
+            return TypedResults.Conflict(Text.L($"\"{name}\" খাতটি {fiscalYear} অর্থবছরে আগেই আছে।", $"The sector \"{name}\" already exists for fiscal year {fiscalYear}."));
         }
 
         var previousYear = sector.FiscalYear;
@@ -152,7 +153,7 @@ public static class BudgetEndpoints
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
         var fiscalYear = await SectorFiscalYearAsync(db, request.BudgetSectorId, ct);
-        if (fiscalYear is null) return TypedResults.NotFound("বাজেট খাতটি পাওয়া যায়নি।");
+        if (fiscalYear is null) return TypedResults.NotFound(Text.L("বাজেট খাতটি পাওয়া যায়নি।", "Budget sector not found."));
 
         var project = new MegaProject
         {
@@ -178,10 +179,10 @@ public static class BudgetEndpoints
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
         var project = await db.MegaProjects.Include(p => p.BudgetSector).SingleOrDefaultAsync(p => p.Id == id, ct);
-        if (project is null) return TypedResults.NotFound("প্রকল্পটি পাওয়া যায়নি।");
+        if (project is null) return TypedResults.NotFound(Text.L("প্রকল্পটি পাওয়া যায়নি।", "Project not found."));
 
         var fiscalYear = await SectorFiscalYearAsync(db, request.BudgetSectorId, ct);
-        if (fiscalYear is null) return TypedResults.NotFound("বাজেট খাতটি পাওয়া যায়নি।");
+        if (fiscalYear is null) return TypedResults.NotFound(Text.L("বাজেট খাতটি পাওয়া যায়নি।", "Budget sector not found."));
 
         var previousYear = project.BudgetSector.FiscalYear;
         project.BudgetSectorId = request.BudgetSectorId;
@@ -219,9 +220,9 @@ public static class BudgetEndpoints
         var fiscalYear = r.FiscalYear?.Trim() ?? string.Empty;
         var errors = new Dictionary<string, string[]>();
 
-        if (name.Length is 0 or > 150) errors["name"] = ["খাতের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।"];
-        if (fiscalYear.Length is 0 or > 20) errors["fiscalYear"] = ["অর্থবছর দিন (সর্বোচ্চ ২০ অক্ষর), যেমন 2025-26।"];
-        if (r.TotalAllocation < 0) errors["totalAllocation"] = ["বরাদ্দ ঋণাত্মক হতে পারে না।"];
+        if (name.Length is 0 or > 150) errors["name"] = [Text.L("খাতের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।", "Enter a sector name (up to 150 characters).")];
+        if (fiscalYear.Length is 0 or > 20) errors["fiscalYear"] = [Text.L("অর্থবছর দিন (সর্বোচ্চ ২০ অক্ষর), যেমন 2025-26।", "Enter a fiscal year (up to 20 characters), e.g. 2025-26.")];
+        if (r.TotalAllocation < 0) errors["totalAllocation"] = [Text.L("বরাদ্দ ঋণাত্মক হতে পারে না।", "The allocation can't be negative.")];
 
         return (name, fiscalYear, errors);
     }
@@ -232,11 +233,11 @@ public static class BudgetEndpoints
         var geoLocation = r.GeoLocation?.Trim() ?? string.Empty;
         var errors = new Dictionary<string, string[]>();
 
-        if (name.Length is 0 or > 200) errors["name"] = ["প্রকল্পের নাম দিন (সর্বোচ্চ ২০০ অক্ষর)।"];
-        if (r.BudgetAmount < 0) errors["budgetAmount"] = ["প্রকল্প ব্যয় ঋণাত্মক হতে পারে না।"];
+        if (name.Length is 0 or > 200) errors["name"] = [Text.L("প্রকল্পের নাম দিন (সর্বোচ্চ ২০০ অক্ষর)।", "Enter a project name (up to 200 characters).")];
+        if (r.BudgetAmount < 0) errors["budgetAmount"] = [Text.L("প্রকল্প ব্যয় ঋণাত্মক হতে পারে না।", "The project cost can't be negative.")];
         if (r.CompletionPercentage is < 0 or > 100 || double.IsNaN(r.CompletionPercentage))
-            errors["completionPercentage"] = ["অগ্রগতি ০ থেকে ১০০-এর মধ্যে হতে হবে।"];
-        if (geoLocation.Length > 100) errors["geoLocation"] = ["অবস্থান সর্বোচ্চ ১০০ অক্ষর হতে পারে।"];
+            errors["completionPercentage"] = [Text.L("অগ্রগতি ০ থেকে ১০০-এর মধ্যে হতে হবে।", "Progress must be between 0 and 100.")];
+        if (geoLocation.Length > 100) errors["geoLocation"] = [Text.L("অবস্থান সর্বোচ্চ ১০০ অক্ষর হতে পারে।", "Location can be up to 100 characters.")];
 
         return (name, geoLocation, errors);
     }

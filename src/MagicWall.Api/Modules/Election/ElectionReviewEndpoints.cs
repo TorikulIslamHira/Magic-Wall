@@ -1,3 +1,4 @@
+using MagicWall.Api.Hosting;
 using System.Security.Claims;
 using MagicWall.Api.Auth;
 using MagicWall.Api.Data;
@@ -56,12 +57,12 @@ public static class ElectionReviewEndpoints
     {
         var note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
         var errors = new Dictionary<string, string[]>();
-        if (request.VotesReceived < 0) errors["votesReceived"] = ["ভোট ঋণাত্মক হতে পারে না।"];
-        if (note is { Length: > 500 }) errors["note"] = ["মন্তব্য সর্বোচ্চ ৫০০ অক্ষর হতে পারে।"];
+        if (request.VotesReceived < 0) errors["votesReceived"] = [Text.L("ভোট ঋণাত্মক হতে পারে না।", "Votes can't be negative.")];
+        if (note is { Length: > 500 }) errors["note"] = [Text.L("মন্তব্য সর্বোচ্চ ৫০০ অক্ষর হতে পারে।", "The note can be up to 500 characters.")];
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
-        if (!await db.Constituencies.AnyAsync(c => c.Id == request.ConstituencyId, ct)) return TypedResults.NotFound("আসনটি পাওয়া যায়নি।");
-        if (!await db.Candidates.AnyAsync(c => c.Id == request.CandidateId, ct)) return TypedResults.NotFound("প্রার্থী পাওয়া যায়নি।");
+        if (!await db.Constituencies.AnyAsync(c => c.Id == request.ConstituencyId, ct)) return TypedResults.NotFound(Text.L("আসনটি পাওয়া যায়নি।", "Constituency not found."));
+        if (!await db.Candidates.AnyAsync(c => c.Id == request.CandidateId, ct)) return TypedResults.NotFound(Text.L("প্রার্থী পাওয়া যায়নি।", "Candidate not found."));
 
         var approved = await db.ElectionResults
             .Where(r => r.ConstituencyId == request.ConstituencyId && r.CandidateId == request.CandidateId)
@@ -121,7 +122,7 @@ public static class ElectionReviewEndpoints
         // Four-eyes principle: the maker can never be the checker.
         if (submission.SubmittedBy == user.UserName())
         {
-            return TypedResults.Problem("নিজের জমা দেওয়া তথ্য নিজে অনুমোদন করা যায় না — অন্য একজন ডেস্ক প্রতিবেদককে অনুমোদন করতে হবে।", statusCode: StatusCodes.Status403Forbidden);
+            return TypedResults.Problem(Text.L("নিজের জমা দেওয়া তথ্য নিজে অনুমোদন করা যায় না — অন্য একজন ডেস্ক প্রতিবেদককে অনুমোদন করতে হবে।", "You can't approve your own submission — another desk reporter has to approve it."), statusCode: StatusCodes.Status403Forbidden);
         }
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -138,7 +139,7 @@ public static class ElectionReviewEndpoints
                 .SetProperty(s => s.ReviewNote, request == null ? null : request.Note), ct);
         if (claimed == 0)
         {
-            return TypedResults.Conflict("এটি ইতিমধ্যে পর্যালোচনা করা হয়েছে।");
+            return TypedResults.Conflict(Text.L("এটি ইতিমধ্যে পর্যালোচনা করা হয়েছে।", "This has already been reviewed."));
         }
 
         // Apply to the approved figure the wall reads.
@@ -186,7 +187,7 @@ public static class ElectionReviewEndpoints
         {
             return TypedResults.ValidationProblem(new Dictionary<string, string[]>
             {
-                ["note"] = ["প্রত্যাখ্যানের কারণ লিখুন (সর্বোচ্চ ৫০০ অক্ষর), যাতে প্রতিবেদক জানতে পারেন কী ঠিক করতে হবে।"]
+                ["note"] = [Text.L("প্রত্যাখ্যানের কারণ লিখুন (সর্বোচ্চ ৫০০ অক্ষর), যাতে প্রতিবেদক জানতে পারেন কী ঠিক করতে হবে।", "Give a reason for rejecting (up to 500 characters), so the reporter knows what to fix.")]
             });
         }
 
@@ -200,7 +201,7 @@ public static class ElectionReviewEndpoints
                 .SetProperty(s => s.ReviewedByName, user.DisplayNameOf())
                 .SetProperty(s => s.ReviewedAt, DateTime.UtcNow)
                 .SetProperty(s => s.ReviewNote, note), ct);
-        if (claimed == 0) return TypedResults.Conflict("এটি ইতিমধ্যে পর্যালোচনা করা হয়েছে।");
+        if (claimed == 0) return TypedResults.Conflict(Text.L("এটি ইতিমধ্যে পর্যালোচনা করা হয়েছে।", "This has already been reviewed."));
 
         await hub.BroadcastQueueChangedAsync(WallModule.Election, await PendingCount(db, ct), ct);
         return TypedResults.Ok((await Load(db, id, ct))!);

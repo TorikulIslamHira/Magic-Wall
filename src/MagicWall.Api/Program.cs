@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using MagicWall.Api.Auth;
@@ -9,10 +10,12 @@ using MagicWall.Api.Modules.Election;
 using MagicWall.Api.Modules.Geopolitics;
 using MagicWall.Api.Modules.Sports;
 using MagicWall.Api.Modules.Sports.Feed;
+using MagicWall.Api.Modules.Sports.Media;
 using MagicWall.Api.Wall;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -83,21 +86,69 @@ builder.Services.AddRateLimiter(options =>
 
 // ---------- live sports feed ----------
 builder.Services.Configure<SportsFeedOptions>(builder.Configuration.GetSection(SportsFeedOptions.Section));
-if (string.Equals(builder.Configuration[$"{SportsFeedOptions.Section}:Provider"], "Http", StringComparison.OrdinalIgnoreCase))
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<FeedPayloadLog>();
+
+// One rate gate per external API, shared by every request to it (see RequestRateGate).
+static RequestRateGate Gate(IServiceProvider services, string api, int perMinute) =>
+    new(api, perMinute, services.GetRequiredService<TimeProvider>(), services.GetRequiredService<ILoggerFactory>().CreateLogger("MagicWall.RateGate"));
+
+var feedProvider = builder.Configuration[$"{SportsFeedOptions.Section}:Provider"] ?? "Demo";
+switch (feedProvider.ToLowerInvariant())
 {
-    builder.Services.AddHttpClient<ISportsFeedProvider, HttpSportsFeedProvider>((services, http) =>
-    {
-        var baseUrl = services.GetRequiredService<IOptions<SportsFeedOptions>>().Value.BaseUrl
-            ?? throw new InvalidOperationException("Sports:Feed:BaseUrl is required for the Http provider.");
-        http.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
-        http.Timeout = TimeSpan.FromSeconds(10);
-    });
-}
-else
-{
-    builder.Services.AddSingleton<ISportsFeedProvider, DemoSportsFeedProvider>();
+    case "footballdata":
+        var footballData = builder.Configuration.GetSection($"{SportsFeedOptions.Section}:FootballData").Get<FootballDataOptions>() ?? new();
+        if (string.IsNullOrWhiteSpace(footballData.ApiKey))
+        {
+            throw new InvalidOperationException(
+                "Sports:Feed:Provider is FootballData but no API key is set (Sports:Feed:FootballData:ApiKey / MAGICWALL_FOOTBALL_DATA_KEY).");
+        }
+        builder.Services.AddKeyedSingleton("football-data", (services, _) => Gate(services, "football-data.org", footballData.RequestsPerMinute));
+        builder.Services.AddHttpClient<ISportsFeedProvider, FootballDataOrgProvider>(http =>
+            {
+                http.BaseAddress = new Uri(footballData.BaseUrl.TrimEnd('/') + "/");
+                http.Timeout = Timeout.InfiniteTimeSpan;   // the rate gate applies the timeout after the wait for a slot
+                http.DefaultRequestHeaders.Add("X-Auth-Token", footballData.ApiKey);
+            })
+            .AddHttpMessageHandler(services => new RateGateHandler(
+                services.GetRequiredKeyedService<RequestRateGate>("football-data"), FootballDataOrgProvider.RetryAfter, TimeSpan.FromSeconds(20)));
+        break;
+
+    case "http":
+        builder.Services.AddHttpClient<ISportsFeedProvider, HttpSportsFeedProvider>((services, http) =>
+        {
+            var baseUrl = services.GetRequiredService<IOptions<SportsFeedOptions>>().Value.BaseUrl
+                ?? throw new InvalidOperationException("Sports:Feed:BaseUrl is required for the Http provider.");
+            http.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+            http.Timeout = TimeSpan.FromSeconds(10);
+        });
+        break;
+
+    case "demo":
+        builder.Services.AddSingleton<ISportsFeedProvider, DemoSportsFeedProvider>();
+        break;
+
+    default:
+        throw new InvalidOperationException($"Unknown Sports:Feed:Provider '{feedProvider}' (use Demo, FootballData or Http).");
 }
 builder.Services.AddHostedService<SportsFeedWorker>();
+
+// ---------- player photos & team badges (TheSportsDB, cached on this server) ----------
+var media = builder.Configuration.GetSection(SportsMediaOptions.Section).Get<SportsMediaOptions>() ?? new();
+builder.Services.Configure<SportsMediaOptions>(builder.Configuration.GetSection(SportsMediaOptions.Section));
+builder.Services.AddSingleton<SportsMediaSignal>();
+builder.Services.AddKeyedSingleton("thesportsdb", (services, _) => Gate(services, "TheSportsDB", media.TheSportsDb.RequestsPerMinute));
+builder.Services.AddHttpClient<ISportsMediaProvider, TheSportsDbProvider>(http =>
+    {
+        // v1 puts the key in the path; HttpClient request logging is kept at Warning (appsettings) so it isn't logged.
+        http.BaseAddress = new Uri($"{media.TheSportsDb.BaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(media.TheSportsDb.ApiKey)}/");
+        http.Timeout = Timeout.InfiniteTimeSpan;   // the rate gate applies the timeout after the wait for a slot
+    })
+    .AddHttpMessageHandler(services => new RateGateHandler(
+        services.GetRequiredKeyedService<RequestRateGate>("thesportsdb"), RateGateHandler.StandardRetryAfter, TimeSpan.FromSeconds(20)));
+builder.Services.AddHttpClient<MediaStore>(http => http.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHostedService<SportsMediaWorker>();
 
 var app = builder.Build();
 
@@ -113,6 +164,14 @@ using (var scope = app.Services.CreateScope())
 
 // First in the pipeline: the presenter port only ever sees the wall, the hub and read-only data.
 app.UsePortIsolation(ports, app.Logger);
+
+// Bangla or English messages per request (Accept-Language); formatting stays invariant (see Text).
+app.UseRequestLocalization(options =>
+{
+    options.DefaultRequestCulture = new RequestCulture(CultureInfo.InvariantCulture, new CultureInfo("bn"));
+    options.SupportedCultures = [CultureInfo.InvariantCulture];
+    options.SupportedUICultures = [new CultureInfo("bn"), new CultureInfo("en")];
+});
 app.Logger.LogInformation("Presenter port {Presenter} (wall, hub, read-only API); admin port {Admin} (control room)",
     ports.Presenter, ports.Admin);
 
@@ -146,6 +205,9 @@ app.MapElectionEndpoints();
 app.MapElectionReviewEndpoints();
 app.MapSportsEndpoints();
 app.MapSportsReviewEndpoints();
+app.MapSportsFeedEndpoints();
+app.MapSportsDataEndpoints();
+app.MapSportsMediaEndpoints();
 app.MapWarEndpoints();
 app.MapBudgetEndpoints();
 

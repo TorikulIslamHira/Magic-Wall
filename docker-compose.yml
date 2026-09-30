@@ -31,6 +31,17 @@ services:
       # Local testing only: demo accounts field1 / desk1 / sports1 / admin.
       Auth__SeedDemoUsers: "${MAGICWALL_DEMO_USERS:-false}"
       Sports__Feed__Enabled: "${MAGICWALL_SPORTS_FEED:-true}"
+      # Demo (generated), FootballData (football-data.org, needs the key below) or Http.
+      Sports__Feed__Provider: "${MAGICWALL_SPORTS_PROVIDER:-Demo}"
+      Sports__Feed__IntervalSeconds: "${MAGICWALL_SPORTS_INTERVAL:-20}"
+      Sports__Feed__FootballData__ApiKey: "${MAGICWALL_FOOTBALL_DATA_KEY:-}"
+      Sports__Feed__FootballData__RequestsPerMinute: "${MAGICWALL_FOOTBALL_DATA_RPM:-10}"
+      Sports__Feed__FootballData__BaseUrl: "${MAGICWALL_FOOTBALL_DATA_URL:-https://api.football-data.org/v4/}"
+      # Player photos and team badges: looked up on TheSportsDB, stored on the data volume.
+      Sports__Media__Enabled: "${MAGICWALL_SPORTS_MEDIA:-true}"
+      Sports__Media__Directory: "/data/media"
+      Sports__Media__TheSportsDb__ApiKey: "${MAGICWALL_THESPORTSDB_KEY:-123}"
+      Sports__Media__TheSportsDb__RequestsPerMinute: "${MAGICWALL_THESPORTSDB_RPM:-30}"
       ConnectionStrings__MagicWall: "Data Source=/data/magicwall.db"
 
     volumes:

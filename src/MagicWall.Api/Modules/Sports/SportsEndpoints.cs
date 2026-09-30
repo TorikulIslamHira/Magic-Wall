@@ -1,7 +1,9 @@
+using MagicWall.Api.Hosting;
 using System.Security.Claims;
 using MagicWall.Api.Auth;
 using MagicWall.Api.Data;
 using MagicWall.Api.Hubs;
+using MagicWall.Api.Modules.Sports.Media;
 using MagicWall.Api.Wall;
 using MagicWall.Api.Workflow;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -10,15 +12,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MagicWall.Api.Modules.Sports;
 
+/// <param name="X">Null when the source had no position (live score feeds): timeline only, not on the pitch.</param>
 public record MatchEventDto(
     int Id,
     MatchEventType EventType,
-    float X,
-    float Y,
+    float? X,
+    float? Y,
     float? EndX,
     float? EndY,
-    int Minute);
+    int Minute,
+    string? Detail = null);
 
+/// <param name="PlayerPhoto">Local URL of the player's photo (see SportsMedia), or null.</param>
 public record PlayerMatchEventsDto(
     int MatchId,
     string MatchTitle,
@@ -26,9 +31,26 @@ public record PlayerMatchEventsDto(
     int PlayerId,
     string PlayerName,
     string Team,
-    IReadOnlyList<MatchEventDto> Events);
+    IReadOnlyList<MatchEventDto> Events,
+    string? PlayerPhoto = null,
+    string? TeamBadge = null);
 
-public record MatchSummaryDto(int Id, string Title, SportType Sport, DateTime MatchDate, string TeamA, string TeamB, string? FeedMatchId = null);
+public record MatchSummaryDto(
+    int Id, string Title, SportType Sport, DateTime MatchDate, string TeamA, string TeamB, string? FeedMatchId = null,
+    string? Competition = null, string? FeedStatus = null, int? ScoreA = null, int? ScoreB = null,
+    string? TeamABadge = null, string? TeamBBadge = null);
+
+/// <summary>One moment on the match timeline (goals, cards, substitutions, wickets…).</summary>
+public record TimelineEventDto(
+    int Id, int Minute, MatchEventType EventType, string? Detail,
+    int PlayerId, string PlayerName, string Team, string? PlayerPhoto);
+
+/// <summary>Everything the wall's scoreboard and timeline need, approved events only.</summary>
+public record MatchTimelineDto(
+    int MatchId, string Title, SportType Sport, string? Competition, DateTime MatchDate,
+    string TeamA, string TeamB, string? TeamABadge, string? TeamBBadge,
+    string? FeedStatus, int? ScoreA, int? ScoreB,
+    IReadOnlyList<TimelineEventDto> Events);
 
 /// <param name="FeedMatchId">The match's id at the data provider; null unlinks it from the feed.</param>
 public record LinkFeedRequest(string? FeedMatchId);
@@ -57,6 +79,7 @@ public static class SportsEndpoints
 
         group.MapGet("/events/{matchId:int}/{playerId:int}", GetPlayerEvents);
         group.MapGet("/matches", GetMatches);
+        group.MapGet("/matches/{id:int}/timeline", GetTimeline);
 
         // Optional filter: /api/sports/players?matchId=1 returns both teams' players.
         group.MapGet("/players", GetPlayers);
@@ -82,7 +105,7 @@ public static class SportsEndpoints
         var player = await db.Players
             .AsNoTracking()
             .Where(p => p.Id == playerId)
-            .Select(p => new { p.Name, p.Team })
+            .Select(p => new { p.Name, p.Team, p.PhotoFile })
             .SingleOrDefaultAsync(ct);
 
         // Distinguish "unknown match/player" (404) from "player has no events yet" (empty list).
@@ -105,21 +128,56 @@ public static class SportsEndpoints
                 e.CoordinateY,
                 e.EndCoordinateX,
                 e.EndCoordinateY,
-                e.Minute))
+                e.Minute,
+                e.Detail))
             .ToListAsync(ct);
 
+        var badge = await db.TeamMedia.AsNoTracking().Where(t => t.Team == player.Team).Select(t => t.BadgeFile).FirstOrDefaultAsync(ct);
         return TypedResults.Ok(new PlayerMatchEventsDto(
-            matchId, match.Title, match.Sport, playerId, player.Name, player.Team, events));
+            matchId, match.Title, match.Sport, playerId, player.Name, player.Team, events,
+            SportsMedia.Url(player.PhotoFile), SportsMedia.Url(badge)));
+    }
+
+    /// <summary>Scoreboard + timeline for the wall: live score/status and the approved major moments.</summary>
+    private static async Task<Results<Ok<MatchTimelineDto>, NotFound>> GetTimeline(int id, AppDbContext db, CancellationToken ct)
+    {
+        var match = await db.Matches.AsNoTracking().SingleOrDefaultAsync(m => m.Id == id, ct);
+        if (match is null) return TypedResults.NotFound();
+
+        var major = SportEvents.Major.ToList();
+        var events = await db.MatchEvents
+            .AsNoTracking()
+            .Where(e => e.MatchId == id && e.Status == ApprovalStatus.Approved && major.Contains(e.EventType))
+            .OrderBy(e => e.Minute).ThenBy(e => e.Id)
+            .Select(e => new TimelineEventDto(e.Id, e.Minute, e.EventType, e.Detail,
+                e.PlayerId, e.Player.Name, e.Player.Team, SportsMedia.Url(e.Player.PhotoFile)))
+            .ToListAsync(ct);
+
+        var badges = await db.TeamMedia.AsNoTracking()
+            .Where(t => t.Team == match.TeamA || t.Team == match.TeamB)
+            .ToDictionaryAsync(t => t.Team, t => t.BadgeFile, ct);
+
+        return TypedResults.Ok(new MatchTimelineDto(
+            match.Id, match.Title, match.Sport, match.Competition, match.MatchDate,
+            match.TeamA, match.TeamB,
+            SportsMedia.Url(badges.GetValueOrDefault(match.TeamA)), SportsMedia.Url(badges.GetValueOrDefault(match.TeamB)),
+            match.FeedStatus, match.ScoreA, match.ScoreB, events));
     }
 
     // Optional filter: /api/sports/matches?sport=Cricket
-    private static Task<List<MatchSummaryDto>> GetMatches(SportType? sport, AppDbContext db, CancellationToken ct) =>
-        db.Matches
-            .AsNoTracking()
-            .Where(m => sport == null || m.Sport == sport)
-            .OrderByDescending(m => m.MatchDate)
-            .Select(m => new MatchSummaryDto(m.Id, m.Title, m.Sport, m.MatchDate, m.TeamA, m.TeamB, m.FeedMatchId))
-            .ToListAsync(ct);
+    private static async Task<List<MatchSummaryDto>> GetMatches(SportType? sport, AppDbContext db, CancellationToken ct)
+    {
+        var badges = await db.TeamMedia.AsNoTracking().Where(t => t.BadgeFile != null).ToDictionaryAsync(t => t.Team, t => t.BadgeFile, ct);
+        return (await db.Matches
+                .AsNoTracking()
+                .Where(m => sport == null || m.Sport == sport)
+                .OrderByDescending(m => m.MatchDate)
+                .ToListAsync(ct))
+            .Select(m => new MatchSummaryDto(m.Id, m.Title, m.Sport, m.MatchDate, m.TeamA, m.TeamB, m.FeedMatchId,
+                m.Competition, m.FeedStatus, m.ScoreA, m.ScoreB,
+                SportsMedia.Url(badges.GetValueOrDefault(m.TeamA)), SportsMedia.Url(badges.GetValueOrDefault(m.TeamB))))
+            .ToList();
+    }
 
     /// <summary>Links a match to the live feed (the worker starts queuing its events) or unlinks it.</summary>
     private static async Task<Results<NoContent, NotFound, ValidationProblem>> LinkFeed(
@@ -128,10 +186,14 @@ public static class SportsEndpoints
         var feedMatchId = string.IsNullOrWhiteSpace(request.FeedMatchId) ? null : request.FeedMatchId.Trim();
         if (feedMatchId is { Length: > 100 })
         {
-            return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["feedMatchId"] = ["ফিড আইডি সর্বোচ্চ ১০০ অক্ষর হতে পারে।"] });
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["feedMatchId"] = [Text.L("ফিড আইডি সর্বোচ্চ ১০০ অক্ষর হতে পারে।", "The feed id can be up to 100 characters.")] });
         }
 
-        var updated = await db.Matches.Where(m => m.Id == id).ExecuteUpdateAsync(set => set.SetProperty(m => m.FeedMatchId, feedMatchId), ct);
+        // A new (or no) link starts fresh: the old id's status — e.g. NOT_FOUND — must not delay polling the new one.
+        var updated = await db.Matches.Where(m => m.Id == id).ExecuteUpdateAsync(set => set
+            .SetProperty(m => m.FeedMatchId, feedMatchId)
+            .SetProperty(m => m.FeedStatus, (string?)null)
+            .SetProperty(m => m.FeedUpdatedAt, (DateTime?)null), ct);
         return updated == 0 ? TypedResults.NotFound() : TypedResults.NoContent();
     }
 
@@ -143,11 +205,11 @@ public static class SportsEndpoints
         var teamB = request.TeamB?.Trim() ?? string.Empty;
 
         var errors = new Dictionary<string, string[]>();
-        if (!Enum.IsDefined(request.Sport)) errors["sport"] = ["অজানা খেলা।"];
-        if (title.Length is 0 or > 200) errors["title"] = ["ম্যাচের শিরোনাম দিন (সর্বোচ্চ ২০০ অক্ষর)।"];
-        if (teamA.Length is 0 or > 100) errors["teamA"] = ["প্রথম দলের নাম দিন (সর্বোচ্চ ১০০ অক্ষর)।"];
-        if (teamB.Length is 0 or > 100) errors["teamB"] = ["দ্বিতীয় দলের নাম দিন (সর্বোচ্চ ১০০ অক্ষর)।"];
-        if (teamA.Length > 0 && teamA == teamB) errors["teamB"] = ["দুই দলের নাম আলাদা হতে হবে।"];
+        if (!Enum.IsDefined(request.Sport)) errors["sport"] = [Text.L("অজানা খেলা।", "Unknown sport.")];
+        if (title.Length is 0 or > 200) errors["title"] = [Text.L("ম্যাচের শিরোনাম দিন (সর্বোচ্চ ২০০ অক্ষর)।", "Enter a match title (up to 200 characters).")];
+        if (teamA.Length is 0 or > 100) errors["teamA"] = [Text.L("প্রথম দলের নাম দিন (সর্বোচ্চ ১০০ অক্ষর)।", "Enter the first team's name (up to 100 characters).")];
+        if (teamB.Length is 0 or > 100) errors["teamB"] = [Text.L("দ্বিতীয় দলের নাম দিন (সর্বোচ্চ ১০০ অক্ষর)।", "Enter the second team's name (up to 100 characters).")];
+        if (teamA.Length > 0 && teamA == teamB) errors["teamB"] = [Text.L("দুই দলের নাম আলাদা হতে হবে।", "The two teams must have different names.")];
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
         var match = new Match { Title = title, Sport = request.Sport, MatchDate = request.MatchDate, TeamA = teamA, TeamB = teamB };
@@ -168,9 +230,9 @@ public static class SportsEndpoints
         var role = request.Role?.Trim() ?? string.Empty;
 
         var errors = new Dictionary<string, string[]>();
-        if (name.Length is 0 or > 150) errors["name"] = ["খেলোয়াড়ের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।"];
-        if (team.Length is 0 or > 100) errors["team"] = ["দলের নাম দিন (সর্বোচ্চ ১০০ অক্ষর)।"];
-        if (role.Length > 50) errors["role"] = ["ভূমিকা সর্বোচ্চ ৫০ অক্ষর হতে পারে।"];
+        if (name.Length is 0 or > 150) errors["name"] = [Text.L("খেলোয়াড়ের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।", "Enter the player's name (up to 150 characters).")];
+        if (team.Length is 0 or > 100) errors["team"] = [Text.L("দলের নাম দিন (সর্বোচ্চ ১০০ অক্ষর)।", "Enter the team name (up to 100 characters).")];
+        if (role.Length > 50) errors["role"] = [Text.L("ভূমিকা সর্বোচ্চ ৫০ অক্ষর হতে পারে।", "The role can be up to 50 characters.")];
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
         var player = new Player { Name = name, Team = team, Role = role };
@@ -229,7 +291,7 @@ public static class SportsEndpoints
 
         if (sport is null)
         {
-            return TypedResults.NotFound("ম্যাচটি পাওয়া যায়নি।");
+            return TypedResults.NotFound(Text.L("ম্যাচটি পাওয়া যায়নি।", "Match not found."));
         }
 
         // A "Six" in a football match would draw nonsense on the wall.
@@ -237,13 +299,13 @@ public static class SportsEndpoints
         {
             return TypedResults.ValidationProblem(new Dictionary<string, string[]>
             {
-                ["eventType"] = ["এই খেলার জন্য এই ঘটনার ধরন প্রযোজ্য নয়।"]
+                ["eventType"] = [Text.L("এই খেলার জন্য এই ঘটনার ধরন প্রযোজ্য নয়।", "That event type doesn't apply to this sport.")]
             });
         }
 
         if (!await db.Players.AnyAsync(p => p.Id == request.PlayerId, ct))
         {
-            return TypedResults.NotFound("খেলোয়াড় পাওয়া যায়নি।");
+            return TypedResults.NotFound(Text.L("খেলোয়াড় পাওয়া যায়নি।", "Player not found."));
         }
 
         var entity = new MatchEvent
@@ -269,7 +331,7 @@ public static class SportsEndpoints
 
         var dto = new MatchEventDto(
             entity.Id, entity.EventType, entity.CoordinateX, entity.CoordinateY,
-            entity.EndCoordinateX, entity.EndCoordinateY, entity.Minute);
+            entity.EndCoordinateX, entity.EndCoordinateY, entity.Minute, entity.Detail);
 
         return TypedResults.Created($"/api/sports/events/{entity.Id}", dto);
     }
@@ -298,26 +360,26 @@ public static class SportsEndpoints
 
         if (!Enum.IsDefined(r.EventType))
         {
-            errors["eventType"] = ["অজানা ঘটনার ধরন।"];
+            errors["eventType"] = [Text.L("অজানা ঘটনার ধরন।", "Unknown event type.")];
         }
 
         if (!InRange(r.X) || !InRange(r.Y))
         {
-            errors["x"] = ["অবস্থান ০ থেকে ১০০-এর মধ্যে হতে হবে।"];
+            errors["x"] = [Text.L("অবস্থান ০ থেকে ১০০-এর মধ্যে হতে হবে।", "The position must be between 0 and 100.")];
         }
 
         if (r.EndX.HasValue != r.EndY.HasValue)
         {
-            errors["endX"] = ["তীরের শেষ বিন্দুর দুটি মানই দিন, অথবা কোনোটিই নয়।"];
+            errors["endX"] = [Text.L("তীরের শেষ বিন্দুর দুটি মানই দিন, অথবা কোনোটিই নয়।", "Give both end-point values for the arrow, or neither.")];
         }
         else if (r.EndX is { } endX && r.EndY is { } endY && (!InRange(endX) || !InRange(endY)))
         {
-            errors["endX"] = ["তীরের শেষ বিন্দু ০ থেকে ১০০-এর মধ্যে হতে হবে।"];
+            errors["endX"] = [Text.L("তীরের শেষ বিন্দু ০ থেকে ১০০-এর মধ্যে হতে হবে।", "The arrow's end point must be between 0 and 100.")];
         }
 
         if (r.Minute is < 0 or > 200)
         {
-            errors["minute"] = ["মিনিট ০ থেকে ২০০-এর মধ্যে হতে হবে।"];
+            errors["minute"] = [Text.L("মিনিট ০ থেকে ২০০-এর মধ্যে হতে হবে।", "The minute must be between 0 and 200.")];
         }
 
         return errors;

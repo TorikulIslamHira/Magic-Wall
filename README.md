@@ -54,6 +54,28 @@ docker run --rm --user 1654 -v magicwall_magicwall-data:/data -v "$PWD/tools:/to
   python:3.13-slim python /tools/seed_demo.py --db /data/magicwall.db
 ```
 
+## Live football data (optional)
+
+Set in `.env`, then `docker compose up -d --build`:
+
+```bash
+MAGICWALL_SPORTS_PROVIDER=FootballData
+MAGICWALL_FOOTBALL_DATA_KEY=<your football-data.org key>
+MAGICWALL_FOOTBALL_DATA_RPM=10        # your plan's requests per minute (Free 10, Deep Data 30)
+MAGICWALL_THESPORTSDB_KEY=123         # TheSportsDB public test key, or your premium key
+```
+
+- **football-data.org** gives fixtures, live status and score. Goal scorers, cards and
+  substitutions are only in their paid "Deep Data" plan; on the free plan the scoreboard works and
+  the event timeline stays empty.
+- The sports desk imports matches in the control room (খেলা → লাইভ সূচি থেকে আমদানি). The score goes
+  to the wall straight away; every goal/card/substitution waits in the approval queue.
+- **TheSportsDB** supplies player photos and team badges. They are downloaded once and served by this
+  server, so the wall never needs the internet. Photos are credited on air ("ছবি: TheSportsDB");
+  check both providers' terms for broadcast use.
+- Every request waits for a free slot in the provider's per-minute quota; background polling
+  always leaves one slot for people in the control room.
+
 ## Run it (without Docker)
 
 ```bash

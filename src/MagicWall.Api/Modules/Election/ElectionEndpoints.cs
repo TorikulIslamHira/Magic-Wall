@@ -1,3 +1,4 @@
+using MagicWall.Api.Hosting;
 using MagicWall.Api.Auth;
 using MagicWall.Api.Data;
 using MagicWall.Api.Hubs;
@@ -77,7 +78,7 @@ public static class ElectionEndpoints
 
         if (await db.Constituencies.AnyAsync(c => c.SvgPathId == svgPathId, ct))
         {
-            return TypedResults.Conflict($"\"{svgPathId}\" মানচিত্র আইডি আগেই অন্য একটি আসনে ব্যবহৃত হয়েছে।");
+            return TypedResults.Conflict(Text.L($"\"{svgPathId}\" মানচিত্র আইডি আগেই অন্য একটি আসনে ব্যবহৃত হয়েছে।", $"Map id \"{svgPathId}\" is already used by another constituency."));
         }
 
         var constituency = new Constituency
@@ -107,7 +108,7 @@ public static class ElectionEndpoints
 
         if (await db.Constituencies.AnyAsync(c => c.Id != id && c.SvgPathId == svgPathId, ct))
         {
-            return TypedResults.Conflict($"\"{svgPathId}\" মানচিত্র আইডি আগেই অন্য একটি আসনে ব্যবহৃত হয়েছে।");
+            return TypedResults.Conflict(Text.L($"\"{svgPathId}\" মানচিত্র আইডি আগেই অন্য একটি আসনে ব্যবহৃত হয়েছে।", $"Map id \"{svgPathId}\" is already used by another constituency."));
         }
 
         constituency.Name = name;
@@ -125,7 +126,7 @@ public static class ElectionEndpoints
     {
         if (request.ConstituencyId is { } seatId && !await db.Constituencies.AnyAsync(c => c.Id == seatId, ct))
         {
-            return TypedResults.NotFound("আসনটি পাওয়া যায়নি।");
+            return TypedResults.NotFound(Text.L("আসনটি পাওয়া যায়নি।", "Constituency not found."));
         }
 
         var name = request.Name?.Trim() ?? string.Empty;
@@ -133,9 +134,9 @@ public static class ElectionEndpoints
         var symbol = request.Symbol?.Trim() ?? string.Empty;
 
         var errors = new Dictionary<string, string[]>();
-        if (name.Length is 0 or > 150) errors["name"] = ["প্রার্থীর নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।"];
-        if (partyName.Length is 0 or > 150) errors["partyName"] = ["দলের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।"];
-        if (symbol.Length > 200) errors["symbol"] = ["প্রতীক সর্বোচ্চ ২০০ অক্ষর হতে পারে।"];
+        if (name.Length is 0 or > 150) errors["name"] = [Text.L("প্রার্থীর নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।", "Enter the candidate's name (up to 150 characters).")];
+        if (partyName.Length is 0 or > 150) errors["partyName"] = [Text.L("দলের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।", "Enter the party name (up to 150 characters).")];
+        if (symbol.Length > 200) errors["symbol"] = [Text.L("প্রতীক সর্বোচ্চ ২০০ অক্ষর হতে পারে।", "The symbol can be up to 200 characters.")];
         if (errors.Count > 0) return TypedResults.ValidationProblem(errors);
 
         var candidate = new Candidate { Name = name, PartyName = partyName, Symbol = symbol, ConstituencyId = request.ConstituencyId };
@@ -180,10 +181,10 @@ public static class ElectionEndpoints
         var districtCode = string.IsNullOrWhiteSpace(r.DistrictCode) ? null : r.DistrictCode.Trim().ToLowerInvariant();
 
         var errors = new Dictionary<string, string[]>();
-        if (name.Length is 0 or > 150) errors["name"] = ["আসনের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।"];
-        if (svgPathId.Length is 0 or > 100) errors["svgPathId"] = ["মানচিত্র আইডি দিন (সর্বোচ্চ ১০০ অক্ষর)।"];
-        if (r.TotalVoters < 0) errors["totalVoters"] = ["মোট ভোটার ঋণাত্মক হতে পারে না।"];
-        if (districtCode is { Length: > 60 }) errors["districtCode"] = ["জেলা কোড সর্বোচ্চ ৬০ অক্ষর হতে পারে।"];
+        if (name.Length is 0 or > 150) errors["name"] = [Text.L("আসনের নাম দিন (সর্বোচ্চ ১৫০ অক্ষর)।", "Enter the constituency name (up to 150 characters).")];
+        if (svgPathId.Length is 0 or > 100) errors["svgPathId"] = [Text.L("মানচিত্র আইডি দিন (সর্বোচ্চ ১০০ অক্ষর)।", "Enter the map id (up to 100 characters).")];
+        if (r.TotalVoters < 0) errors["totalVoters"] = [Text.L("মোট ভোটার ঋণাত্মক হতে পারে না।", "Total voters can't be negative.")];
+        if (districtCode is { Length: > 60 }) errors["districtCode"] = [Text.L("জেলা কোড সর্বোচ্চ ৬০ অক্ষর হতে পারে।", "District code can be up to 60 characters.")];
 
         return (name, svgPathId, districtCode, errors);
     }
@@ -254,7 +255,7 @@ public static class ElectionEndpoints
         {
             return TypedResults.ValidationProblem(new Dictionary<string, string[]>
             {
-                ["votesReceived"] = ["ভোট ঋণাত্মক হতে পারে না।"]
+                ["votesReceived"] = [Text.L("ভোট ঋণাত্মক হতে পারে না।", "Votes can't be negative.")]
             });
         }
 
@@ -265,12 +266,12 @@ public static class ElectionEndpoints
 
         if (svgPathId is null)
         {
-            return TypedResults.NotFound("আসনটি পাওয়া যায়নি।");
+            return TypedResults.NotFound(Text.L("আসনটি পাওয়া যায়নি।", "Constituency not found."));
         }
 
         if (!await db.Candidates.AnyAsync(c => c.Id == request.CandidateId, ct))
         {
-            return TypedResults.NotFound("প্রার্থী পাওয়া যায়নি।");
+            return TypedResults.NotFound(Text.L("প্রার্থী পাওয়া যায়নি।", "Candidate not found."));
         }
 
         var result = await db.ElectionResults.SingleOrDefaultAsync(

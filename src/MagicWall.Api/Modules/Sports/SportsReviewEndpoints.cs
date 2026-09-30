@@ -1,7 +1,9 @@
+using MagicWall.Api.Hosting;
 using System.Security.Claims;
 using MagicWall.Api.Auth;
 using MagicWall.Api.Data;
 using MagicWall.Api.Hubs;
+using MagicWall.Api.Modules.Sports.Media;
 using MagicWall.Api.Wall;
 using MagicWall.Api.Workflow;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -19,11 +21,13 @@ public record QueuedEventDto(
     string PlayerName,
     string Team,
     MatchEventType EventType,
-    float X,
-    float Y,
+    float? X,
+    float? Y,
     float? EndX,
     float? EndY,
     int Minute,
+    string? Detail,
+    string? PlayerPhoto,
     ApprovalStatus Status,
     EventSource Source,
     string SubmittedBy,
@@ -67,6 +71,7 @@ public static class SportsReviewEndpoints
             .Select(e => new QueuedEventDto(
                 e.Id, e.MatchId, e.Match.Title, e.Match.Sport, e.PlayerId, e.Player.Name, e.Player.Team,
                 e.EventType, e.CoordinateX, e.CoordinateY, e.EndCoordinateX, e.EndCoordinateY, e.Minute,
+                e.Detail, SportsMedia.Url(e.Player.PhotoFile),
                 e.Status, e.Source, e.SubmittedBy, e.SubmittedAt, e.ReviewedBy, e.ReviewedAt))
             .ToListAsync(ct);
     }
@@ -86,7 +91,7 @@ public static class SportsReviewEndpoints
         var ids = request.Ids?.Distinct().ToArray() ?? [];
         if (ids.Length is 0 or > MaxBatch)
         {
-            return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["ids"] = ["১ থেকে ৫০০টি ঘটনা বেছে নিন।"] });
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["ids"] = [Text.L("১ থেকে ৫০০টি ঘটনা বেছে নিন।", "Select between 1 and 500 events.")] });
         }
 
         // Which match:player views the wall must redraw after an approval.
