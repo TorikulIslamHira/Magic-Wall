@@ -1,5 +1,6 @@
 // Small UI helpers shared by the admin dashboard's modules (admin.js, review.js, field.js, users.js).
 import { el, setChildren } from './dom.js';
+import { num, t } from './i18n.js';
 
 export const $ = selector => document.querySelector(selector);
 
@@ -10,7 +11,7 @@ export function toast(message, kind = 'ok') {
   const hide = () => { node.hidden = true; };
   setChildren(node,
     el('span', { class: 'toast-text' }, message),
-    kind === 'error' ? el('button', { type: 'button', class: 'toast-close', 'aria-label': 'বন্ধ করুন', onclick: hide }, '✕') : null);
+    kind === 'error' ? el('button', { type: 'button', class: 'toast-close', 'aria-label': t.close, onclick: hide }, '✕') : null);
   node.dataset.kind = kind;
   node.setAttribute('role', kind === 'error' ? 'alert' : 'status');
   node.hidden = false;
@@ -73,6 +74,95 @@ export function enableCardTables(root = document) {
     new MutationObserver(relabel).observe(table, { childList: true, subtree: true });
     label(table);
   }
+}
+
+// ---------- undo: approvals and rejections wait a few seconds before they're sent ----------
+
+let pending = null;   // the one action waiting to be sent
+
+/**
+ * Shows "message · 5 · Undo" and sends the action only when the time is up. Undo cancels it
+ * (nothing reached the server). One action waits at a time: starting another sends the first.
+ * Leaving the page sends a waiting action immediately (keepalive), so nothing is lost.
+ * @param commit  async (keepalive) => …, the actual request(s)
+ * @param onUndo  restores the screen when the user undoes
+ */
+export function deferWithUndo({ message, commit, onUndo, seconds = 5 }) {
+  flushPending();
+  const node = $('#toast');
+  let left = seconds;
+  const count = el('span', { class: 'toast-count', 'aria-hidden': 'true' }, num(left));
+  const undo = el('button', { type: 'button', class: 'secondary sm toast-undo' }, t.admin.queue.undo);
+  setChildren(node, el('span', { class: 'toast-text' }, message), count, undo);
+  node.dataset.kind = 'pending';
+  node.setAttribute('role', 'status');
+  node.hidden = false;
+  clearTimeout(toastTimer);
+
+  const entry = { commit, done: false };
+  const tick = setInterval(() => { left = Math.max(0, left - 1); count.textContent = num(left); }, 1000);
+  entry.stop = () => { clearTimeout(entry.timer); clearInterval(tick); };
+  entry.timer = setTimeout(() => run(entry), seconds * 1000);
+  undo.addEventListener('click', () => {
+    if (entry.done) return;
+    entry.done = true;
+    entry.stop();
+    if (pending === entry) pending = null;
+    toast(t.admin.queue.undone);
+    onUndo?.();
+  });
+  pending = entry;
+}
+
+async function run(entry, keepalive = false) {
+  if (entry.done) return;
+  entry.done = true;
+  entry.stop();
+  if (pending === entry) pending = null;
+  try {
+    await entry.commit(keepalive);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+/** Sends the waiting action now (before signing out, or when the page goes away). */
+export function flushPending(keepalive = false) {
+  return pending ? run(pending, keepalive) : Promise.resolve();
+}
+
+window.addEventListener('pagehide', () => { flushPending(true); });
+
+// ---------- a small "⋯" menu for secondary actions ----------
+
+/** A "⋯" button that opens a short list of actions: [{ label, onSelect, disabled?, danger? }]. */
+export function moreMenu(label, items) {
+  const button = el('button', { type: 'button', class: 'secondary sm more-button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': label, title: label }, '⋯');
+  const menu = el('div', { class: 'menu', role: 'menu', hidden: true },
+    items.map(item => el('button', {
+      type: 'button', role: 'menuitem', class: item.danger ? 'menu-item is-danger' : 'menu-item', disabled: item.disabled,
+      title: item.title ?? null,
+      onclick: () => { close(); item.onSelect(); }
+    }, item.label)));
+  const wrap = el('div', { class: 'menu-wrap' }, button, menu);
+
+  const onOutside = event => { if (!wrap.contains(event.target)) close(); };
+  const onKey = event => { if (event.key === 'Escape') { close(); button.focus(); } };
+  function open() {
+    menu.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    menu.querySelector('.menu-item:not(:disabled)')?.focus();
+    document.addEventListener('pointerdown', onOutside);
+    document.addEventListener('keydown', onKey);
+  }
+  function close() {
+    menu.hidden = true;
+    button.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', onOutside);
+    document.removeEventListener('keydown', onKey);
+  }
+  button.addEventListener('click', () => (menu.hidden ? open() : close()));
+  return wrap;
 }
 
 /** A small coloured status label ("অপেক্ষমাণ", "অনুমোদিত", …). */

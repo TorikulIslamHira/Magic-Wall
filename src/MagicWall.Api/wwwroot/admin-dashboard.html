@@ -48,7 +48,7 @@
     </div>
 
     <div class="header-status">
-      <span class="on-air-pill" data-cap="ControlWall"><span class="dot" aria-hidden="true"></span>সম্প্রচারে · <strong id="on-air">…</strong></span>
+      <button type="button" id="on-air-pill" class="on-air-pill" data-cap="ControlWall" aria-controls="sidebar" title="সম্প্রচার নিয়ন্ত্রণ খুলুন"><span class="dot" aria-hidden="true"></span>সম্প্রচারে · <strong id="on-air">…</strong></button>
       <span id="hub-status" class="conn-pill" data-status="connecting">সংযোগ হচ্ছে…</span>
     </div>
 
@@ -101,18 +101,30 @@
 
     <div id="nav-backdrop" class="nav-backdrop" hidden></div>
 
+    <!-- Navigation: what you do here, grouped (a rail on wide screens, a bottom bar on phones). -->
+    <nav class="tabs" role="tablist" aria-label="সম্পাদক">
+      <div class="tab-group" data-group="queues" role="presentation">
+        <span class="tab-group-label" aria-hidden="true">অনুমোদন সারি</span>
+          <button type="button" role="tab" data-tab="Submit" data-cap="FieldOnly"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg><span class="tab-label">ফলাফল জমা</span></button>
+          <button type="button" role="tab" data-tab="ElectionQueue" data-cap="ReviewElection"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v9H4z"/><path d="M8 11V4h8v7"/><path d="M10 7.5l1.5 1.5 3-3"/></svg><span class="tab-label">নির্বাচন অনুমোদন</span><span class="tab-short">ভোট যাচাই</span> <span class="tab-badge" id="badge-election" hidden></span></button>
+          <button type="button" role="tab" data-tab="SportsQueue" data-cap="ManageSports"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M4 12h10M4 18h6"/><path d="M15 17l2 2 4-4"/></svg><span class="tab-label">খেলা অনুমোদন</span><span class="tab-short">ফিড যাচাই</span> <span class="tab-badge" id="badge-sports" hidden></span></button>
+      </div>
+      <div class="tab-group" data-group="data" role="presentation">
+        <span class="tab-group-label" aria-hidden="true">ডেটা</span>
+          <button type="button" role="tab" data-tab="Election" data-cap="EditDesk"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="tab-label">নির্বাচন</span></button>
+          <button type="button" role="tab" data-tab="Sports" data-cap="ManageSports"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8l3.5 2.5-1.3 4h-4.4l-1.3-4z"/></svg><span class="tab-label">খেলা</span></button>
+          <button type="button" role="tab" data-tab="FeedData" data-cap="ManageSports"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="2.8"/><path d="M5 6v12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8V6"/><path d="M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8"/></svg><span class="tab-label">ফিড ডেটা</span><span class="tab-short">ডেটা</span></button>
+          <button type="button" role="tab" data-tab="War" data-cap="EditDesk"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.5 2.5 3.5 5 3.5 8s-1 5.5-3.5 8c-2.5-2.5-3.5-5-3.5-8s1-5.5 3.5-8z"/></svg><span class="tab-label">সংঘাত</span></button>
+          <button type="button" role="tab" data-tab="Budget" data-cap="EditDesk"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 4"/></svg><span class="tab-label">বাজেট</span></button>
+      </div>
+      <div class="tab-group" data-group="admin" role="presentation">
+        <span class="tab-group-label" aria-hidden="true">অ্যাডমিন</span>
+          <button type="button" role="tab" data-tab="Settings" data-cap="ManageUsers"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="tab-label">সেটিংস</span></button>
+      </div>
+    </nav>
+
     <!-- ডান: সম্পাদনা -->
     <main class="content">
-      <nav class="tabs" role="tablist" aria-label="সম্পাদক">
-        <button type="button" role="tab" data-tab="Submit" data-cap="FieldOnly"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg><span class="tab-label">ফলাফল জমা</span></button>
-        <button type="button" role="tab" data-tab="ElectionQueue" data-cap="ReviewElection"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v9H4z"/><path d="M8 11V4h8v7"/><path d="M10 7.5l1.5 1.5 3-3"/></svg><span class="tab-label">নির্বাচন অনুমোদন</span><span class="tab-short">ভোট যাচাই</span> <span class="tab-badge" id="badge-election" hidden></span></button>
-        <button type="button" role="tab" data-tab="SportsQueue" data-cap="ManageSports"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M4 12h10M4 18h6"/><path d="M15 17l2 2 4-4"/></svg><span class="tab-label">খেলা অনুমোদন</span><span class="tab-short">ফিড যাচাই</span> <span class="tab-badge" id="badge-sports" hidden></span></button>
-        <button type="button" role="tab" data-tab="Election" data-cap="EditDesk"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="tab-label">নির্বাচন</span></button>
-        <button type="button" role="tab" data-tab="Sports" data-cap="ManageSports"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8l3.5 2.5-1.3 4h-4.4l-1.3-4z"/></svg><span class="tab-label">খেলা</span></button>
-        <button type="button" role="tab" data-tab="War" data-cap="EditDesk"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.5 2.5 3.5 5 3.5 8s-1 5.5-3.5 8c-2.5-2.5-3.5-5-3.5-8s1-5.5 3.5-8z"/></svg><span class="tab-label">সংঘাত</span></button>
-        <button type="button" role="tab" data-tab="Budget" data-cap="EditDesk"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 4"/></svg><span class="tab-label">বাজেট</span></button>
-        <button type="button" role="tab" data-tab="Settings" data-cap="ManageUsers"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="tab-label">সেটিংস</span></button>
-      </nav>
 
       <!-- ===== মাঠ প্রতিবেদক: ফলাফল জমা ===== -->
       <div class="panel-stack field-stack" role="tabpanel" data-panel="Submit" hidden>
@@ -148,7 +160,24 @@
             <div><h2>অনুমোদনের অপেক্ষায় <span class="count-pill" id="eq-count">০</span></h2>
               <p>মাঠ প্রতিবেদকদের পাঠানো সংখ্যা। অনুমোদন করলেই ওয়ালে যাবে। নিজের জমা নিজে অনুমোদন করা যায় না।</p></div>
           </div>
-          <div id="eq-list" class="queue-list"></div>
+          <div class="bulk-bar" id="eq-bulk">
+            <label class="check-label"><input id="eq-select-all" type="checkbox"> সব বেছে নিন</label>
+            <div class="button-row">
+              <button id="eq-approve" type="button" disabled>✓ অনুমোদন</button>
+              <button id="eq-reject" type="button" class="danger" disabled>✕ প্রত্যাখ্যান</button>
+            </div>
+          </div>
+          <div id="eq-bulk-reason" class="reject-row" hidden>
+            <input id="eq-bulk-reason-input" type="text" maxlength="500" class="reason-input" placeholder="প্রত্যাখ্যানের কারণ (প্রতিবেদক দেখতে পাবেন)" aria-label="প্রত্যাখ্যানের কারণ (প্রতিবেদক দেখতে পাবেন)">
+            <button id="eq-bulk-reason-confirm" type="button" class="danger">প্রত্যাখ্যান নিশ্চিত করুন</button>
+            <button id="eq-bulk-reason-cancel" type="button" class="secondary">বাতিল</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data queue-table">
+              <thead><tr><th></th><th>আসন</th><th>প্রার্থী</th><th class="num">ওয়ালে এখন</th><th class="num">নতুন সংখ্যা</th><th>জমা</th><th>এসেছে</th><th></th></tr></thead>
+              <tbody id="eq-list"></tbody>
+            </table>
+          </div>
         </section>
         <section class="card">
           <div class="card-head"><div><h2>সাম্প্রতিক সিদ্ধান্ত</h2></div></div>
@@ -166,6 +195,7 @@
           <label class="field-wide">ম্যাচ
             <select id="sq-match"></select>
           </label>
+          <div id="sq-match-head" class="match-head" hidden></div>
           <div class="queue-sports">
             <canvas id="sq-pitch" class="mini-pitch" aria-label="অপেক্ষমাণ ঘটনার অবস্থান"></canvas>
             <div class="queue-sports-list">
@@ -190,7 +220,7 @@
       <!-- ===== অ্যাডমিন: সেটিংস ===== -->
       <div class="panel-stack settings" role="tabpanel" data-panel="Settings" hidden>
         <!-- Who holds which role, at a glance; a card filters the user list below. -->
-        <div id="st-roles" class="role-cards" aria-label="ভূমিকা অনুযায়ী ব্যবহারকারী"></div>
+        <div id="st-roles" class="role-summary" aria-label="ভূমিকা অনুযায়ী ব্যবহারকারী"></div>
 
         <section class="card">
           <div class="card-head">
@@ -233,7 +263,7 @@
           <div class="user-toolbar">
             <input id="us-search" type="search" placeholder="নাম বা লগইন দিয়ে খুঁজুন" aria-label="ব্যবহারকারী খুঁজুন">
             <select id="us-filter" aria-label="ভূমিকা অনুযায়ী ছাঁকুন"></select>
-            <label class="check-label"><input id="us-show-inactive" type="checkbox" checked> নিষ্ক্রিয়দেরও দেখান</label>
+            <label class="check-label"><input id="us-show-inactive" type="checkbox"> নিষ্ক্রিয়দেরও দেখান</label>
           </div>
           <div class="table-wrap">
             <table class="data users-table">
@@ -280,7 +310,7 @@
           <p id="el-summary" class="summary"></p>
           <div class="table-wrap">
             <table class="data">
-              <thead><tr><th>প্রার্থী</th><th>দল</th><th class="num">ভোট</th><th></th></tr></thead>
+              <thead><tr><th>প্রার্থী</th><th data-en="Party">দল</th><th class="num">ভোট</th><th></th></tr></thead>
               <tbody id="el-results"></tbody>
             </table>
           </div>
@@ -324,7 +354,7 @@
               <label class="span-all">আসন
                 <select id="el-new-candidate-seat" required></select>
               </label>
-              <label>দল
+              <label data-en="Party">দল
                 <input id="el-new-candidate-party" type="text" required maxlength="150" list="el-parties" autocomplete="off">
                 <datalist id="el-parties"></datalist>
               </label>
@@ -355,10 +385,34 @@
               <select id="sp-player"></select>
             </label>
           </div>
+          <div id="sp-match-head" class="match-head" hidden></div>
           <div class="feed-row">
             <span id="sp-feed-status" class="feed-status"></span>
             <input id="sp-feed-id" type="text" maxlength="100" placeholder="ফিডে ম্যাচের আইডি" aria-label="ফিডে ম্যাচের আইডি">
             <button id="sp-feed-toggle" type="button" class="secondary">লাইভ ফিড চালু</button>
+          </div>
+        </section>
+
+        <!-- Real fixtures from the data provider (only when it publishes schedules, e.g. football-data.org). -->
+        <section class="card" id="sp-fixtures-card" hidden>
+          <div class="card-head">
+            <div>
+              <h2>লাইভ সূচি থেকে আমদানি</h2>
+              <p>প্রোভাইডারের গতকাল থেকে আগামী ১০ দিনের ম্যাচ। আমদানি করলে ম্যাচটি তৈরি হয়ে লাইভ ফিডে যুক্ত হয়: স্কোর সরাসরি ওয়ালে যায়, গোল-কার্ড আসে অনুমোদন সারিতে।</p>
+            </div>
+          </div>
+          <div class="inline-form">
+            <label>প্রতিযোগিতা
+              <select id="sp-fixtures-competition"></select>
+            </label>
+            <button type="button" id="sp-fixtures-load" class="secondary">সূচি দেখুন</button>
+          </div>
+          <p id="sp-fixtures-note" class="hint"></p>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>কিক-অফ</th><th>ম্যাচ</th><th>অবস্থা</th><th></th></tr></thead>
+              <tbody id="sp-fixtures"></tbody>
+            </table>
           </div>
         </section>
 
@@ -428,6 +482,52 @@
             </form>
           </section>
         </div>
+      </div>
+
+      <!-- ===== স্পোর্টস ডেস্ক: ফিড ডেটা ===== -->
+      <div class="panel-stack" role="tabpanel" data-panel="FeedData" hidden>
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>ফিড থেকে আসা ডেটা</h2>
+              <p>লাইভ ফিড যা এনেছে — ম্যাচ, দল, খেলোয়াড় ও ছবি। এগুলো অনুমোদন সারি ছাড়াই থাকে; এখানে দেখে দরকার হলে ঠিক করুন। পরিবর্তন সঙ্গে সঙ্গে ওয়ালে যায়।</p>
+            </div>
+          </div>
+          <label class="field-wide">ম্যাচ
+            <select id="dt-match-select"></select>
+          </label>
+          <div id="dt-match" class="data-match"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>খেলোয়াড়</h2>
+              <p>নাম বা ভূমিকা ঠিক করুন; ভুল ছবি হলে আবার খুঁজুন। ফিডের পরের ঘটনাগুলোও ঠিক করা নামেই আসবে।</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data data-players">
+              <thead><tr><th>ছবি</th><th>নাম</th><th>দল</th><th>ভূমিকা</th><th>ফিড আইডি</th><th>ঘটনা</th><th></th></tr></thead>
+              <tbody id="dt-players"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>দল ও লোগো</h2>
+              <p>সব দল, তাদের লোগো ও উৎস। নাম বদলালে সব ম্যাচ ও খেলোয়াড়ে বদলায়; একই দলের দুটি নাম থাকলে একটিকে অন্যটির নাম দিলে দুটি এক হয়ে যায়।</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data data-teams">
+              <thead><tr><th>লোগো</th><th>দল</th><th>ম্যাচ</th><th>খেলোয়াড়</th><th>উৎস</th><th></th></tr></thead>
+              <tbody id="dt-teams"></tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       <!-- ===== সংঘাত ===== -->
@@ -526,7 +626,7 @@
           </label>
           <div class="table-wrap">
             <table class="data">
-              <thead><tr><th>প্রকল্প</th><th class="num">ব্যয়</th><th class="num">অগ্রগতি %</th><th>অবস্থান</th><th></th></tr></thead>
+              <thead><tr><th data-en="Project">প্রকল্প</th><th class="num">ব্যয়</th><th class="num">অগ্রগতি %</th><th data-en="Location">অবস্থান</th><th></th></tr></thead>
               <tbody id="budget-projects"></tbody>
             </table>
           </div>

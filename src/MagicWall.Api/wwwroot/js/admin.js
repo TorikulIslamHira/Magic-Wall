@@ -6,15 +6,21 @@
 // Every write goes through the REST API; the server broadcasts to all walls and other admin
 // screens over SignalR, so several producers stay in sync.
 import { UNAUTHORIZED_EVENT, connectHub, getJson, sendJson } from './api.js';
-import { $, attempt, enableCardTables, fillSelect, toast } from './admin-ui.js';
+import { $, attempt, enableCardTables, fillSelect, flushPending, toast } from './admin-ui.js';
 import { el, setChildren } from './dom.js';
 import { createFieldForm } from './field.js';
-import { date, num, t } from './i18n.js';
+import { badge, createFeedData, matchHeader } from './feeddata.js';
+import { LANG, date, kickoff, languageToggle, localizeDom, num, t } from './i18n.js';
 import { EVENT_COLORS, EVENT_TYPES, SPORTS, drawArrow, drawSurface, fitCanvas, fromPx, surfaceRect, toPx } from './pitch.js';
 import { createElectionQueue, createSportsQueue } from './review.js';
 import { createSettingsPanel } from './users.js';
 
 const A = t.admin;
+
+// The page's static text in the chosen language, and the switch (header + login card).
+localizeDom();
+document.querySelector('.user-chip').prepend(languageToggle('lang-toggle'));
+document.querySelector('.login-card').append(languageToggle('lang-toggle is-login'));
 
 let wallState = null;
 
@@ -34,17 +40,18 @@ function setWallState(state) {
   }
   for (const tab of document.querySelectorAll('[data-tab]')) {
     tab.classList.toggle('is-live', tab.dataset.tab === state.activeModule);
+    tab.dataset.live = A.onAirTag;   // spelled out on the rail (a dot on the phone bar)
   }
 }
 
 for (const button of document.querySelectorAll('[data-module]')) {
   button.addEventListener('click', () => {
     pushState({ activeModule: button.dataset.module }, A.onAir(A.modules[button.dataset.module]));
-    if (isPhone()) setDrawer(false);   // on a phone the drawer covers the page: close it once the choice is made
+    setDrawer(false);   // the drawer covers the page: close it once the choice is made (the pill shows the result)
   });
 }
 
-// ---------- phones: the on-air controls live in a slide-in drawer ----------
+// ---------- the on-air controls live in a slide-in drawer (every width) ----------
 
 const phoneQuery = matchMedia('(max-width: 768px)');
 const isPhone = () => phoneQuery.matches;
@@ -77,7 +84,7 @@ drawer.addEventListener('touchstart', event => {
   swipeStart = { x: t.clientX, y: t.clientY };
 }, { passive: true });
 drawer.addEventListener('touchend', event => {
-  if (!swipeStart || !isPhone()) return;
+  if (!swipeStart) return;
   const t = event.changedTouches[0];
   const dx = t.clientX - swipeStart.x;
   if (dx < -60 && Math.abs(dx) > Math.abs(t.clientY - swipeStart.y) * 1.5) setDrawer(false);
@@ -85,12 +92,13 @@ drawer.addEventListener('touchend', event => {
 }, { passive: true });
 
 // Growing past phone width (rotating a tablet) puts the sidebar back in the page.
-phoneQuery.addEventListener('change', () => {
-  if (!isPhone()) {
-    setDrawer(false);
-    if (me && !drawer.hidden) loadPreview();
-  }
-});
+// The on-air pill opens the drawer too: it's where people look for "what's on air".
+$('#on-air-pill').addEventListener('click', () => setDrawer(true));
+
+// Sticky elements sit under the header; its height changes with the width (it wraps on phones).
+new ResizeObserver(([entry]) => {
+  document.documentElement.style.setProperty('--header-h', `${Math.round(entry.target.getBoundingClientRect().height)}px`);
+}).observe(document.querySelector('.topbar'));
 
 // Table rows turn into cards on phones; label every cell with its column.
 enableCardTables();
@@ -103,8 +111,11 @@ const allowedTab = name => {
   return tab && !tab.hidden;
 };
 
+const TAB_KEY = 'magicwall.tab';
+
 function showTab(name) {
   if (!allowedTab(name)) name = document.querySelector('[data-tab]:not([hidden])')?.dataset.tab;
+  try { sessionStorage.setItem(TAB_KEY, name); } catch { /* not remembered */ }
   for (const tab of document.querySelectorAll('[data-tab]')) tab.setAttribute('aria-selected', String(tab.dataset.tab === name));
   for (const panel of document.querySelectorAll('[data-panel]')) panel.hidden = panel.dataset.panel !== name;
   if (name === 'Sports') sports.resizePitch();
@@ -150,7 +161,7 @@ const election = {
       .sort((a, b) => a.name_en.localeCompare(b.name_en));
     fillSelect($('#el-new-seat-district'), districtOptions, {
       value: d => d.code,
-      label: d => `${d.name_bn} (${d.name_en})`,
+      label: d => (LANG === 'en' ? d.name_en : `${d.name_bn} (${d.name_en})`),
       placeholder: A.election.chooseDistrict
     });
     const parties = [...new Set(this.candidates.map(c => c.partyName))].sort();
@@ -348,13 +359,17 @@ const sports = {
     const match = this.match;
     const row = $('#sp-feed-status').closest('.feed-row');
     row.hidden = !match;
+    $('#sp-match-head').hidden = !match;
     if (!match) return;
+    setChildren($('#sp-match-head'), matchHeader(match));
     const linked = Boolean(match.feedMatchId);
-    $('#sp-feed-status').textContent = linked ? A.feed.linked(match.feedMatchId) : A.feed.unlinked;
-    $('#sp-feed-status').classList.toggle('is-on', linked);
+    const missing = linked && match.feedStatus === 'NOT_FOUND';
+    $('#sp-feed-status').textContent = missing ? A.feed.notFound(match.feedMatchId) : linked ? A.feed.linked(match.feedMatchId) : A.feed.unlinked;
+    $('#sp-feed-status').classList.toggle('is-on', linked && !missing);
+    $('#sp-feed-status').classList.toggle('is-error', missing);
     $('#sp-feed-id').hidden = linked;
     if (!linked && !$('#sp-feed-id').value) $('#sp-feed-id').value = `live-${match.id}`;
-    $('#sp-feed-toggle').textContent = linked ? 'লাইভ ফিড বন্ধ' : 'লাইভ ফিড চালু';
+    $('#sp-feed-toggle').textContent = linked ? A.feed.turnOff : A.feed.turnOn;
   },
 
   async toggleFeed() {
@@ -527,6 +542,7 @@ const sports = {
     ctx.save();
     ctx.globalAlpha = 0.45;
     for (const e of this.events) {
+      if (e.x == null) continue;   // live-feed goals/cards have no position
       const p = toPx(this.rect, e.x, e.y);
       if (e.endX != null) drawArrow(ctx, p, toPx(this.rect, e.endX, e.endY), EVENT_COLORS[e.eventType] ?? '#fff', 2);
       dot(ctx, p, 4, EVENT_COLORS[e.eventType] ?? '#fff');
@@ -574,10 +590,68 @@ $('#sp-form').addEventListener('submit', event => {
 });
 $('#sp-show').addEventListener('click', () => {
   const match = sports.match;
-  const playerId = sports.playerId;
-  if (!match || !playerId) return toast(A.sports.pickMatchPlayer, 'error');
-  pushState({ activeModule: 'Sports', matchId: match.id, playerId }, A.sports.onWall);
+  if (!match) return toast(A.sports.pickMatchPlayer, 'error');
+  // No player chosen: the whole match goes on air (scoreboard, timeline, spotlight).
+  pushState({ activeModule: 'Sports', matchId: match.id, playerId: sports.playerId }, A.sports.onWall);
 });
+
+// ---------- live fixtures (providers that publish schedules) ----------
+
+const fixtures = {
+  async init() {
+    const status = await getJson('/api/sports/feed/status');
+    $('#sp-fixtures-card').hidden = !status?.canImport;
+    if (!status?.canImport) return;
+    fillSelect($('#sp-fixtures-competition'), status.competitions, {
+      value: c => c,
+      label: c => (A.feed.competitions[c] ? `${A.feed.competitions[c]} (${c})` : c)
+    });
+    $('#sp-fixtures-note').textContent = A.feed.note(status.provider, status.mediaProvider);
+    setChildren($('#sp-fixtures'), el('tr', {}, el('td', { colspan: 4, class: 'muted' }, A.feed.pickCompetition)));
+  },
+
+  get competition() {
+    return $('#sp-fixtures-competition').value;
+  },
+
+  async load() {
+    const list = await getJson(`/api/sports/feed/fixtures?competition=${encodeURIComponent(this.competition)}`);
+    setChildren($('#sp-fixtures'), list?.length
+      ? list.map(f => el('tr', {},
+          el('td', {}, kickoff(f.kickoffUtc)),
+          el('td', {}, el('span', { class: 'fixture-teams' },
+            badge(f.homeBadge, f.homeTeam, 'fx-badge'), el('strong', {}, f.homeTeam),
+            el('span', { class: 'muted' }, A.sports.versus),
+            el('strong', {}, f.awayTeam), badge(f.awayBadge, f.awayTeam, 'fx-badge'))),
+          el('td', {}, [t.sports.status[f.status] ?? f.status,
+            f.scoreHome != null ? ` · ${num(f.scoreHome)}–${num(f.scoreAway)}` : ''].join('')),
+          el('td', {}, f.matchId
+            ? el('button', { type: 'button', class: 'secondary', onclick: () => this.open(f.matchId) }, `${A.feed.imported} · ${A.feed.open}`)
+            : el('button', { type: 'button', onclick: () => this.import(f) }, A.feed.importButton))))
+      : el('tr', {}, el('td', { colspan: 4, class: 'muted' }, A.feed.noFixtures)));
+  },
+
+  async import(fixture) {
+    const created = await attempt(
+      () => sendJson('POST', '/api/sports/feed/import', { feedMatchId: fixture.feedMatchId, competition: this.competition }),
+      match => A.feed.importedToast(match.title));
+    if (!created) return;
+    await this.open(created.id);
+    await this.load();
+  },
+
+  /** Select an imported match in the editor above. */
+  async open(matchId) {
+    sports.matches = (await getJson('/api/sports/matches')) ?? [];
+    $('#sp-sport').value = 'Football';
+    await sports.onSportChange();
+    $('#sp-match').value = String(matchId);
+    await sports.onMatchChange();
+    $('#sp-match').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+};
+
+$('#sp-fixtures-load').addEventListener('click', () => attempt(() => fixtures.load()));
 
 // ---------- war editor ----------
 
@@ -873,6 +947,7 @@ $('#sp-feed-toggle').addEventListener('click', () => sports.toggleFeed());
 // ---------- sign-in & capabilities ----------
 
 let me = null;
+let feedData = null;
 let electionQueue = null;
 let sportsQueue = null;
 let fieldForm = null;
@@ -885,6 +960,7 @@ function applyCapabilities(user) {
   const caps = new Set(user.capabilities);
   if (caps.has('SubmitElection') && !caps.has('ReviewElection')) caps.add('FieldOnly');
   for (const node of document.querySelectorAll('[data-cap]')) node.hidden = !caps.has(node.dataset.cap);
+  for (const group of document.querySelectorAll('.tab-group')) group.hidden = !group.querySelector('[data-tab]:not([hidden])');
   document.body.classList.toggle('no-sidebar', !caps.has('ControlWall'));
   document.body.classList.toggle('field-mode', caps.has('FieldOnly'));
   $('#user-name').textContent = user.displayName;
@@ -932,6 +1008,7 @@ $('#login-form').addEventListener('submit', async event => {
 });
 
 $('#logout').addEventListener('click', async () => {
+  await flushPending();   // an approval still in its undo window goes out first, while we're signed in
   await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   location.reload();   // nothing of this user's session stays in memory
 });
@@ -960,6 +1037,7 @@ function onDataChanged({ module, key }) {
   // Another producer edited what this screen is showing: refresh it.
   if (module === 'Election' && election.current?.svgPathId === key) attempt(() => election.load(key));
   if (module === 'Sports' && key === `${sports.match?.id}:${sports.playerId}`) attempt(() => sports.loadEvents());
+  if (module === 'Sports' && feedData && !document.querySelector('[data-panel="FeedData"]').hidden) attempt(() => feedData.refresh());
   if (module === 'War') attempt(() => war.init());
   if (module === 'Budget') attempt(() => budget.init());
 }
@@ -1058,7 +1136,8 @@ async function startApp(user) {
   }
   if (caps.has('ManageSports')) {
     sportsQueue = createSportsQueue({ onCount: n => setBadge('#badge-sports', n) });
-    jobs.push(attempt(() => sportsQueue.refresh()), attempt(() => sports.init()));
+    feedData = createFeedData();
+    jobs.push(attempt(() => sportsQueue.refresh()), attempt(() => sports.init()), attempt(() => fixtures.init()), attempt(() => feedData.refresh()));
   }
   if (caps.has('EditDesk')) {
     jobs.push(attempt(() => election.init()), attempt(() => war.init()), attempt(() => budget.init()));
@@ -1070,8 +1149,12 @@ async function startApp(user) {
 
   const initial = await attempt(() => getJson('/api/wall/state'));
   if (initial) setWallState(initial);
-  // Open where this person's work is: the form, the review queue, or the module on air.
-  showTab(caps.has('FieldOnly') ? 'Submit'
+  // Back where this person was (e.g. after switching language), else where their work is:
+  // the form, the review queue, or the module on air.
+  let savedTab = null;
+  try { savedTab = sessionStorage.getItem(TAB_KEY); } catch { /* none */ }
+  showTab(savedTab && allowedTab(savedTab) ? savedTab
+    : caps.has('FieldOnly') ? 'Submit'
     : caps.has('ReviewElection') ? 'ElectionQueue'
     : caps.has('ManageSports') ? 'SportsQueue'
     : initial?.activeModule);
@@ -1080,7 +1163,6 @@ async function startApp(user) {
   if (initial && caps.has('ControlWall')) await attempt(() => focusEditorsOn(initial));
   // The live preview is a whole second wall: only load it for people who see the sidebar
   // (and on phones only once they open the drawer).
-  if (caps.has('ControlWall') && !isPhone()) loadPreview();
   startHub();
 }
 
